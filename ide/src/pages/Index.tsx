@@ -1,19 +1,18 @@
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { FileExplorer } from "@/components/ide/FileExplorer";
-import { EditorTabs, TabInfo } from "@/components/ide/EditorTabs";
-import { CodeEditor } from "@/components/ide/CodeEditor";
+import { EditorTabs } from "@/components/ide/EditorTabs";
+import CodeEditor from "@/components/editor/CodeEditor";
 import { Terminal, LogEntry } from "@/components/ide/Terminal";
 import { Toolbar } from "@/components/ide/Toolbar";
 import { ContractPanel } from "@/components/ide/ContractPanel";
 import { StatusBar } from "@/components/ide/StatusBar";
-import { sampleContracts, FileNode } from "@/lib/sample-contracts";
+import { FileNode } from "@/lib/sample-contracts";
+import { useFileStore } from "@/store/useFileStore";
 import {
   PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen,
   FolderTree, Rocket, X, FileText, Terminal as TerminalIcon,
 } from "lucide-react";
-
-const cloneFiles = (files: FileNode[]): FileNode[] =>
-  JSON.parse(JSON.stringify(files));
+import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from "@/components/ui/resizable";
 
 const findNode = (nodes: FileNode[], pathParts: string[]): FileNode | null => {
   for (const node of nodes) {
@@ -25,18 +24,22 @@ const findNode = (nodes: FileNode[], pathParts: string[]): FileNode | null => {
   return null;
 };
 
-const findParent = (nodes: FileNode[], pathParts: string[]): FileNode[] | null => {
-  if (pathParts.length <= 1) return nodes;
-  const parent = findNode(nodes, pathParts.slice(0, -1));
-  return parent?.children ?? null;
-};
-
 const Index = () => {
-  const [files, setFiles] = useState<FileNode[]>(() => cloneFiles(sampleContracts));
-  const [openTabs, setOpenTabs] = useState<TabInfo[]>([
-    { path: ["hello_world", "lib.rs"], name: "lib.rs" },
-  ]);
-  const [activeTabPath, setActiveTabPath] = useState<string[]>(["hello_world", "lib.rs"]);
+  const {
+    files,
+    openTabs,
+    activeTabPath,
+    unsavedFiles,
+    setActiveTabPath,
+    addTab,
+    closeTab,
+    createFile,
+    createFolder,
+    deleteNode,
+    renameNode,
+    markSaved,
+  } = useFileStore();
+
   const [terminalExpanded, setTerminalExpanded] = useState(true);
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [network, setNetwork] = useState("testnet");
@@ -45,27 +48,8 @@ const Index = () => {
   const [showExplorer, setShowExplorer] = useState(false);
   const [showPanel, setShowPanel] = useState(false);
   const [cursorPos, setCursorPos] = useState({ line: 1, col: 1 });
-  const [unsavedFiles, setUnsavedFiles] = useState<Set<string>>(new Set());
   const [saveStatus, setSaveStatus] = useState("");
   const [mobilePanel, setMobilePanel] = useState<"none" | "explorer" | "interact">("none");
-
-  // Track saved state
-  const savedContentRef = useRef<Record<string, string>>({});
-
-  // Initialize saved content
-  useEffect(() => {
-    const init = (nodes: FileNode[], path: string[]) => {
-      for (const node of nodes) {
-        const p = [...path, node.name].join("/");
-        if (node.type === "file" && node.content) {
-          savedContentRef.current[p] = node.content;
-        }
-        if (node.children) init(node.children, [...path, node.name]);
-      }
-    };
-    init(files, []);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   // Desktop defaults — show panels on wide screens
   useEffect(() => {
@@ -95,66 +79,20 @@ const Index = () => {
 
   const handleFileSelect = useCallback((path: string[], file: FileNode) => {
     if (file.type !== "file") return;
-    const key = path.join("/");
-    setActiveTabPath(path);
-    setOpenTabs((prev) => {
-      if (prev.some((t) => t.path.join("/") === key)) return prev;
-      return [...prev, { path, name: file.name }];
-    });
+    addTab(path, file.name);
     // Close mobile explorer after selection
     setMobilePanel("none");
-  }, []);
+  }, [addTab]);
 
   const handleTabClose = useCallback((path: string[]) => {
-    const key = path.join("/");
-    setOpenTabs((prev) => {
-      const next = prev.filter((t) => t.path.join("/") !== key);
-      if (activeTabPath.join("/") === key && next.length > 0) {
-        setActiveTabPath(next[next.length - 1].path);
-      }
-      return next;
-    });
-    // Remove unsaved marker
-    setUnsavedFiles((prev) => {
-      const next = new Set(prev);
-      next.delete(key);
-      return next;
-    });
-  }, [activeTabPath]);
-
-  const handleContentChange = useCallback((newContent: string) => {
-    const key = activeTabPath.join("/");
-    setFiles((prev) => {
-      const next = cloneFiles(prev);
-      const file = findNode(next, activeTabPath);
-      if (file) file.content = newContent;
-      return next;
-    });
-    // Mark unsaved
-    setUnsavedFiles((prev) => {
-      if (savedContentRef.current[key] !== newContent) {
-        return new Set(prev).add(key);
-      }
-      const next = new Set(prev);
-      next.delete(key);
-      return next;
-    });
-  }, [activeTabPath]);
+    closeTab(path);
+  }, [closeTab]);
 
   const handleSave = useCallback(() => {
-    const key = activeTabPath.join("/");
-    const file = findNode(files, activeTabPath);
-    if (file?.content !== undefined) {
-      savedContentRef.current[key] = file.content;
-    }
-    setUnsavedFiles((prev) => {
-      const next = new Set(prev);
-      next.delete(key);
-      return next;
-    });
+    markSaved(activeTabPath);
     setSaveStatus("Saved");
     setTimeout(() => setSaveStatus(""), 2000);
-  }, [activeTabPath, files]);
+  }, [activeTabPath, markSaved]);
 
   // Global Ctrl/Cmd+S
   useEffect(() => {
@@ -167,109 +105,6 @@ const Index = () => {
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
   }, [handleSave]);
-
-  const handleCreateFile = useCallback((parentPath: string[], name: string) => {
-    const newContent = name.endsWith(".rs")
-      ? `#![no_std]\nuse soroban_sdk::{contract, contractimpl, Env};\n\n// New contract\n`
-      : "";
-    setFiles((prev) => {
-      const next = cloneFiles(prev);
-      const parent = parentPath.length === 0 ? next : findNode(next, parentPath)?.children;
-      if (parent) {
-        parent.push({
-          name,
-          type: "file",
-          language: name.endsWith(".rs") ? "rust" : name.endsWith(".toml") ? "toml" : "text",
-          content: newContent,
-        });
-      }
-      return next;
-    });
-    const newPath = [...parentPath, name];
-    const key = newPath.join("/");
-    savedContentRef.current[key] = newContent;
-    setActiveTabPath(newPath);
-    setOpenTabs((prev) => [...prev, { path: newPath, name }]);
-  }, []);
-
-  const handleCreateFolder = useCallback((parentPath: string[], name: string) => {
-    setFiles((prev) => {
-      const next = cloneFiles(prev);
-      const parent = parentPath.length === 0 ? next : findNode(next, parentPath)?.children;
-      if (parent) {
-        parent.push({ name, type: "folder", children: [] });
-      }
-      return next;
-    });
-  }, []);
-
-  const handleDeleteNode = useCallback((path: string[]) => {
-    setFiles((prev) => {
-      const next = cloneFiles(prev);
-      const parent = findParent(next, path);
-      if (parent) {
-        const idx = parent.findIndex((n) => n.name === path[path.length - 1]);
-        if (idx !== -1) parent.splice(idx, 1);
-      }
-      return next;
-    });
-    const key = path.join("/");
-    setOpenTabs((prev) => {
-      const next = prev.filter((t) => t.path.join("/") !== key);
-      if (activeTabPath.join("/") === key && next.length > 0) {
-        setActiveTabPath(next[next.length - 1].path);
-      }
-      return next;
-    });
-  }, [activeTabPath]);
-
-  const handleRenameNode = useCallback((path: string[], newName: string) => {
-    const oldKey = path.join("/");
-    const newPath = [...path.slice(0, -1), newName];
-    const newKey = newPath.join("/");
-
-    setFiles((prev) => {
-      const next = cloneFiles(prev);
-      const node = findNode(next, path);
-      if (node) node.name = newName;
-      return next;
-    });
-
-    // Update open tabs
-    setOpenTabs((prev) =>
-      prev.map((t) => {
-        const tKey = t.path.join("/");
-        if (tKey === oldKey || tKey.startsWith(oldKey + "/")) {
-          const updated = [...newPath, ...t.path.slice(path.length)];
-          return { ...t, path: updated, name: updated[updated.length - 1] };
-        }
-        return t;
-      })
-    );
-
-    // Update active tab
-    if (activeTabPath.join("/") === oldKey || activeTabPath.join("/").startsWith(oldKey + "/")) {
-      setActiveTabPath([...newPath, ...activeTabPath.slice(path.length)]);
-    }
-
-    // Update saved content refs
-    const entries = Object.entries(savedContentRef.current);
-    for (const [k, v] of entries) {
-      if (k === oldKey || k.startsWith(oldKey + "/")) {
-        const newK = newKey + k.slice(oldKey.length);
-        savedContentRef.current[newK] = v;
-        delete savedContentRef.current[k];
-      }
-    }
-  }, [activeTabPath]);
-
-  const getActiveContent = (): { content: string; language: string } => {
-    const file = findNode(files, activeTabPath);
-    return {
-      content: file?.content || "// Select a file to begin editing",
-      language: file?.language || "rust",
-    };
-  };
 
   const handleCompile = useCallback(() => {
     setIsCompiling(true);
@@ -334,6 +169,9 @@ const Index = () => {
     unsaved: unsavedFiles.has(t.path.join("/")),
   }));
 
+  const activeFile = findNode(files, activeTabPath);
+  const language = activeFile?.language || "rust";
+
   return (
     <div className="h-screen flex flex-col overflow-hidden">
       {/* Toolbar */}
@@ -349,30 +187,15 @@ const Index = () => {
 
       {/* Main area */}
       <div className="flex-1 flex overflow-hidden relative">
-        {/* Desktop sidebar toggle + explorer */}
-        <div className="hidden md:flex">
-          <div className="flex flex-col bg-sidebar border-r border-border">
-            <button
-              onClick={() => setShowExplorer(!showExplorer)}
-              className="p-2 text-muted-foreground hover:text-foreground transition-colors"
-              title="Toggle Explorer"
-            >
-              {showExplorer ? <PanelLeftClose className="h-4 w-4" /> : <PanelLeftOpen className="h-4 w-4" />}
-            </button>
-          </div>
-          {showExplorer && (
-            <div className="w-56 border-r border-border">
-              <FileExplorer
-                files={files}
-                onFileSelect={handleFileSelect}
-                activeFilePath={activeTabPath}
-                onCreateFile={handleCreateFile}
-                onCreateFolder={handleCreateFolder}
-                onDeleteNode={handleDeleteNode}
-                onRenameNode={handleRenameNode}
-              />
-            </div>
-          )}
+        {/* Left Toggle Bar */}
+        <div className="hidden md:flex flex-col bg-sidebar border-r border-border shrink-0 z-10">
+          <button
+            onClick={() => setShowExplorer(!showExplorer)}
+            className="p-2 text-muted-foreground hover:text-foreground transition-colors"
+            title="Toggle Explorer"
+          >
+            {showExplorer ? <PanelLeftClose className="h-4 w-4" /> : <PanelLeftOpen className="h-4 w-4" />}
+          </button>
         </div>
 
         {/* Mobile overlay panels */}
@@ -381,18 +204,18 @@ const Index = () => {
             <div className="w-64 bg-sidebar border-r border-border h-full">
               <div className="flex items-center justify-between px-3 py-2 border-b border-border">
                 <span className="text-xs font-semibold text-muted-foreground uppercase">Explorer</span>
-                <button onClick={() => setMobilePanel("none")} className="text-muted-foreground hover:text-foreground">
+                <button title="Close Explorer" onClick={() => setMobilePanel("none")} className="text-muted-foreground hover:text-foreground">
                   <X className="h-4 w-4" />
                 </button>
               </div>
               <FileExplorer
                 files={files}
-                onFileSelect={(path, file) => { handleFileSelect(path, file); }}
+                onFileSelect={handleFileSelect}
                 activeFilePath={activeTabPath}
-                onCreateFile={handleCreateFile}
-                onCreateFolder={handleCreateFolder}
-                onDeleteNode={handleDeleteNode}
-                onRenameNode={handleRenameNode}
+                onCreateFile={(parent, name) => createFile(parent, name)}
+                onCreateFolder={createFolder}
+                onDeleteNode={deleteNode}
+                onRenameNode={renameNode}
               />
             </div>
             <div className="flex-1 bg-background/60" onClick={() => setMobilePanel("none")} />
@@ -404,7 +227,7 @@ const Index = () => {
             <div className="w-72 bg-card border-l border-border h-full">
               <div className="flex items-center justify-between px-3 py-2 border-b border-border">
                 <span className="text-xs font-semibold text-muted-foreground uppercase">Interact</span>
-                <button onClick={() => setMobilePanel("none")} className="text-muted-foreground hover:text-foreground">
+                <button title="Close Interact" onClick={() => setMobilePanel("none")} className="text-muted-foreground hover:text-foreground">
                   <X className="h-4 w-4" />
                 </button>
               </div>
@@ -413,39 +236,83 @@ const Index = () => {
           </div>
         )}
 
-        {/* Editor area */}
-        <div className="flex-1 flex flex-col min-w-0">
-          <EditorTabs
-            tabs={tabsWithStatus}
-            activeTab={activeTabPath.join("/")}
-            onTabSelect={setActiveTabPath}
-            onTabClose={handleTabClose}
-          />
-          <div className="flex-1 overflow-hidden">
-            <CodeEditor
-              content={content}
-              language={language}
-              onChange={handleContentChange}
-              onCursorChange={(line, col) => setCursorPos({ line, col })}
-              onSave={handleSave}
-            />
-          </div>
-          <Terminal
-            logs={logs}
-            isExpanded={terminalExpanded}
-            onToggle={() => setTerminalExpanded(!terminalExpanded)}
-            onClear={() => setLogs([])}
-          />
+        {/* Resizable Layout for Desktop Content */}
+        <div className="flex-1 flex overflow-hidden">
+          <ResizablePanelGroup direction="horizontal" autoSaveId="ide-main-layout">
+            
+            {showExplorer && (
+              <>
+                <ResizablePanel id="explorer" order={1} defaultSize={20} minSize={10} maxSize={40} className="hidden md:block">
+                  <div className="h-full w-full overflow-hidden border-r border-border bg-sidebar">
+                    <FileExplorer
+                      files={files}
+                      onFileSelect={handleFileSelect}
+                      activeFilePath={activeTabPath}
+                      onCreateFile={(parent, name) => createFile(parent, name)}
+                      onCreateFolder={createFolder}
+                      onDeleteNode={deleteNode}
+                      onRenameNode={renameNode}
+                    />
+                  </div>
+                </ResizablePanel>
+                <ResizableHandle withHandle className="hidden md:flex" />
+              </>
+            )}
+
+            <ResizablePanel id="main-content" order={2} minSize={30} className="flex flex-col min-w-0">
+              <ResizablePanelGroup direction="vertical" autoSaveId="ide-editor-terminal">
+                
+                <ResizablePanel id="editor" order={1} defaultSize={75} minSize={30} className="flex flex-col min-w-0">
+                  <EditorTabs
+                    tabs={tabsWithStatus}
+                    activeTab={activeTabPath.join("/")}
+                    onTabSelect={setActiveTabPath}
+                    onTabClose={handleTabClose}
+                  />
+                  <div className="flex-1 overflow-hidden">
+                    <CodeEditor
+                      onCursorChange={(line, col) => setCursorPos({ line, col })}
+                      onSave={handleSave}
+                    />
+                  </div>
+                </ResizablePanel>
+
+                {terminalExpanded ? (
+                  <>
+                    <ResizableHandle withHandle />
+                    <ResizablePanel id="terminal" order={2} defaultSize={25} minSize={10} className="flex flex-col min-w-0">
+                      <Terminal
+                        logs={logs}
+                        isExpanded={terminalExpanded}
+                        onToggle={() => setTerminalExpanded(!terminalExpanded)}
+                        onClear={() => setLogs([])}
+                      />
+                    </ResizablePanel>
+                  </>
+                ) : (
+                  <div className="shrink-0 flex flex-col min-w-0">
+                    <Terminal
+                      logs={logs}
+                      isExpanded={terminalExpanded}
+                      onToggle={() => setTerminalExpanded(!terminalExpanded)}
+                      onClear={() => setLogs([])}
+                    />
+                  </div>
+                )}
+
+              </ResizablePanelGroup>
+            </ResizablePanel>
+          </ResizablePanelGroup>
         </div>
 
         {/* Desktop contract panel */}
-        <div className="hidden md:flex">
+        <div className="hidden md:flex shrink-0 z-10">
           {showPanel && (
-            <div className="w-64 border-l border-border">
+            <div className="w-64 border-l border-border bg-card">
               <ContractPanel contractId={contractId} onInvoke={handleInvoke} />
             </div>
           )}
-          <div className="flex flex-col bg-card border-l border-border">
+          <div className="flex flex-col bg-card border-l border-border h-full">
             <button
               onClick={() => setShowPanel(!showPanel)}
               className="p-2 text-muted-foreground hover:text-foreground transition-colors"

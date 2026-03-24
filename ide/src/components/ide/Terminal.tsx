@@ -30,7 +30,7 @@ export function Terminal({ logs, isExpanded, onToggle, onClear }: TerminalProps)
   };
 
   return (
-    <div className="flex flex-col bg-terminal-bg border-t border-border">
+    <div className="flex flex-col bg-terminal-bg border-t border-border h-full">
       <button
         onClick={onToggle}
         className="flex items-center justify-between px-2 md:px-3 py-1.5 text-xs font-mono text-muted-foreground hover:text-foreground transition-colors border-b border-border"
@@ -48,6 +48,7 @@ export function Terminal({ logs, isExpanded, onToggle, onClear }: TerminalProps)
           {isExpanded && onClear && logs.length > 0 && (
             <span
               role="button"
+              title="Clear console"
               className="p-0.5 hover:bg-muted rounded text-muted-foreground hover:text-foreground"
               onClick={(e) => { e.stopPropagation(); onClear(); }}
             >
@@ -58,7 +59,7 @@ export function Terminal({ logs, isExpanded, onToggle, onClear }: TerminalProps)
         </div>
       </button>
       {isExpanded && (
-        <div className="h-28 md:h-40 overflow-y-auto p-2 space-y-0.5">
+        <div className="flex-1 overflow-y-auto p-2 space-y-0.5">
           {logs.length === 0 ? (
             <div className="text-muted-foreground/50 text-[10px] md:text-xs font-mono p-2">
               <span className="text-terminal-cyan">$</span> Ready. Compile a contract to see output...
