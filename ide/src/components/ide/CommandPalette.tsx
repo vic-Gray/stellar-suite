@@ -7,7 +7,7 @@ import {
   CommandList,
   CommandShortcut,
 } from "@/components/ui/command";
-import { Code2, Rocket, TestTube } from "lucide-react";
+import { Hammer, Rocket, TestTube } from "lucide-react";
 
 interface CommandPaletteProps {
   open: boolean;
@@ -18,8 +18,8 @@ const ideCommands = [
   {
     id: "build-contract",
     label: "Build Contract",
-    shortcut: "Enter",
-    icon: Code2,
+    shortcut: "Cmd/Ctrl+B",
+    icon: Hammer,
     action: () => window.dispatchEvent(new Event("ide:build-contract")),
   },
   {

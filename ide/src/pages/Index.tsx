@@ -7,6 +7,7 @@ import { Toolbar } from "@/components/ide/Toolbar";
 import { ContractPanel } from "@/components/ide/ContractPanel";
 import { ContractsRepo } from "@/components/ide/ContractsRepo";
 import { StatusBar } from "@/components/ide/StatusBar";
+import { IdentityCard } from "@/components/ide/IdentityCard";
 import { FileNode } from "@/lib/sample-contracts";
 import { useFileStore } from "@/store/useFileStore";
 import { useDiagnosticsStore } from "@/store/useDiagnosticsStore";
@@ -23,11 +24,29 @@ import {
   FileText,
   Terminal as TerminalIcon,
 } from "lucide-react";
+
+import CodeEditor from "@/components/editor/CodeEditor";
+import { ContractPanel } from "@/components/ide/ContractPanel";
+import { EditorTabs } from "@/components/ide/EditorTabs";
+import { FileExplorer } from "@/components/ide/FileExplorer";
+import { StatusBar } from "@/components/ide/StatusBar";
+import { Terminal, LogEntry } from "@/components/ide/Terminal";
+import { Toolbar } from "@/components/ide/Toolbar";
 import {
   ResizablePanelGroup,
   ResizablePanel,
   ResizableHandle,
 } from "@/components/ui/resizable";
+import { toast } from "@/components/ui/use-toast";
+import {
+  CompileRequestError,
+  compileWorkspace,
+  createBuildWorkspacePayload,
+} from "@/lib/build-contract";
+import { FileNode } from "@/lib/sample-contracts";
+import { useDiagnosticsStore } from "@/store/useDiagnosticsStore";
+import { useFileStore } from "@/store/useFileStore";
+import { parseMixedOutput } from "@/utils/cargoParser";
 
 const findNode = (nodes: FileNode[], pathParts: string[]): FileNode | null => {
   for (const node of nodes) {
@@ -66,14 +85,18 @@ const Index = () => {
   const [terminalExpanded, setTerminalExpanded] = useState(true);
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [isCompiling, setIsCompiling] = useState(false);
+  const [buildState, setBuildState] = useState<
+    "idle" | "building" | "success" | "error"
+  >("idle");
   const [contractId, setContractId] = useState<string | null>(null);
   const [showExplorer, setShowExplorer] = useState(false);
   const [showPanel, setShowPanel] = useState(false);
   const [cursorPos, setCursorPos] = useState({ line: 1, col: 1 });
   const [saveStatus, setSaveStatus] = useState("");
-  const [mobilePanel, setMobilePanel] = useState<"none" | "explorer" | "interact">("none");
+  const [mobilePanel, setMobilePanel] = useState<"none" | "explorer" | "interact">(
+    "none"
+  );
 
-  // Desktop defaults — show panels on wide screens
   useEffect(() => {
     const mq = window.matchMedia("(min-width: 768px)");
     if (mq.matches) {
@@ -104,7 +127,6 @@ const Index = () => {
     (path: string[], file: FileNode) => {
       if (file.type !== "file") return;
       addTab(path, file.name);
-      // Close mobile explorer after selection
       setMobilePanel("none");
     },
     [addTab]
@@ -123,112 +145,49 @@ const Index = () => {
     setTimeout(() => setSaveStatus(""), 2000);
   }, [activeTabPath, markSaved]);
 
-  // Global Ctrl/Cmd+S
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key === "s") {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") {
         e.preventDefault();
         handleSave();
+      }
+
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "b") {
+        e.preventDefault();
+        window.dispatchEvent(new Event("ide:build-contract"));
       }
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
   }, [handleSave]);
 
-  const handleCompile = useCallback(() => {
+  const handleCompile = useCallback(async () => {
+    if (isCompiling) return;
+
     setIsCompiling(true);
+    setBuildState("building");
     setTerminalExpanded(true);
     clearDiagnostics();
     addLog("info", "$ cargo build --message-format=json --target wasm32-unknown-unknown");
     addLog("info", `Target network: ${network}`);
+    addLog("info", "Compressing workspace into JSON payload...");
 
-    setTimeout(() => addLog("info", "   Compiling soroban-sdk v20.0.0"), 400);
-    setTimeout(() => addLog("info", "   Compiling hello_world v0.1.0"), 900);
+    try {
+      const payload = createBuildWorkspacePayload(files, network);
+      const endpoint = import.meta.env.VITE_COMPILE_API_URL || "/api/compile";
+      addLog("info", `POST ${endpoint}`);
+      addLog("info", `Sending ${payload.files.length} file(s) to compiler API`);
 
-    setTimeout(() => {
-      // Simulate cargo --message-format=json output (NDJSON)
-      // In production this would come from the backend via WebSocket/postMessage
-      const simulatedCargoOutput = [
-        // Dependency noise — should be ignored (no primary span in src/lib.rs)
-        JSON.stringify({
-          reason: "compiler-message",
-          package_id: "soroban-sdk 20.0.0",
-          message: {
-            message: "unused import: `vec`",
-            code: { code: "unused_imports", explanation: null },
-            level: "warning",
-            spans: [
-              {
-                file_name: "/root/.cargo/registry/src/soroban-sdk/src/lib.rs",
-                line_start: 3,
-                line_end: 3,
-                column_start: 5,
-                column_end: 8,
-                is_primary: true,
-                label: null,
-              },
-            ],
-            children: [],
-          },
-        }),
-        // Error in the user's contract — should be captured
-        JSON.stringify({
-          reason: "compiler-message",
-          package_id: "hello_world 0.1.0",
-          message: {
-            message: "mismatched types: expected `Symbol`, found `u32`",
-            code: { code: "E0308", explanation: null },
-            level: "error",
-            spans: [
-              {
-                file_name: "/workspace/hello_world/src/lib.rs",
-                line_start: 12,
-                line_end: 12,
-                column_start: 9,
-                column_end: 21,
-                is_primary: true,
-                label: "expected `Symbol`, found `u32`",
-              },
-            ],
-            children: [],
-          },
-        }),
-        // Warning in the user's contract
-        JSON.stringify({
-          reason: "compiler-message",
-          package_id: "hello_world 0.1.0",
-          message: {
-            message: "unused variable: `env`",
-            code: { code: "unused_variables", explanation: null },
-            level: "warning",
-            spans: [
-              {
-                file_name: "/workspace/hello_world/src/lib.rs",
-                line_start: 10,
-                line_end: 10,
-                column_start: 16,
-                column_end: 19,
-                is_primary: true,
-                label: "help: if this is intentional, prefix it with an underscore: `_env`",
-              },
-            ],
-            children: [],
-          },
-        }),
-        // Build-finished line — not a compiler-message, should be ignored
-        JSON.stringify({ reason: "build-finished", success: false }),
-      ].join("\n");
-
-      // Determine active contract name from the active file path
+      const result = await compileWorkspace(payload);
       const contractName = files[0]?.name ?? "hello_world";
-
-      const parsed = parseMixedOutput(simulatedCargoOutput, contractName);
+      const parsed = parseMixedOutput(result.output, contractName);
       setDiagnostics(parsed);
 
       const errors = parsed.filter((d) => d.severity === "error");
       const warnings = parsed.filter((d) => d.severity === "warning");
+      const buildSucceeded =
+        typeof result.success === "boolean" ? result.success : errors.length === 0;
 
-      // Log each diagnostic to the terminal
       for (const d of parsed) {
         const prefix = d.severity === "error" ? "error" : "warning";
         const code = d.code ? `[${d.code}]` : "";
@@ -239,22 +198,69 @@ const Index = () => {
         addLog("info", `  --> ${d.fileId}:${d.line}:${d.column}`);
       }
 
-      if (errors.length > 0) {
-        addLog(
-          "error",
-          `✗ Build failed: ${errors.length} error(s), ${warnings.length} warning(s)`
-        );
-      } else {
-        addLog(
-          "success",
-          `✓ Compilation successful! ${warnings.length > 0 ? `${warnings.length} warning(s)` : "No warnings."}`
-        );
-        addLog("info", "Contract hash: 7a8b9c...d4e5f6");
+      if (result.output.trim() && parsed.length === 0) {
+        result.output
+          .split("\n")
+          .map((line) => line.trim())
+          .filter(Boolean)
+          .forEach((line) => addLog("info", line));
       }
 
+      if (!buildSucceeded || errors.length > 0) {
+        setBuildState("error");
+        addLog(
+          "error",
+          `Build failed: ${errors.length} error(s), ${warnings.length} warning(s)`
+        );
+        toast({
+          variant: "destructive",
+          title: "Build failed",
+          description: "The compiler reported errors. Check the console for details.",
+        });
+        return;
+      }
+
+      setBuildState("success");
+      addLog(
+        "success",
+        `Build successful${warnings.length > 0 ? ` with ${warnings.length} warning(s)` : ""}`
+      );
+      if (result.contractHash) {
+        addLog("info", `Contract hash: ${result.contractHash}`);
+      }
+      toast({
+        title: "Build complete",
+        description:
+          warnings.length > 0
+            ? `Compiled with ${warnings.length} warning(s).`
+            : "Contract compiled successfully.",
+      });
+    } catch (error) {
+      setBuildState("error");
+
+      if (error instanceof CompileRequestError) {
+        addLog("error", `Compile API error (${error.status}): ${error.message}`);
+        if (error.responseBody.trim() && error.responseBody !== error.message) {
+          addLog("error", error.responseBody);
+        }
+      } else if (error instanceof Error) {
+        addLog("error", `Build request failed: ${error.message}`);
+      } else {
+        addLog("error", "Build request failed for an unknown reason.");
+      }
+
+      toast({
+        variant: "destructive",
+        title: "Build request failed",
+        description:
+          error instanceof Error
+            ? error.message
+            : "The compile API could not be reached.",
+      });
+    } finally {
       setIsCompiling(false);
-    }, 1800);
-  }, [network, addLog, files, clearDiagnostics, setDiagnostics]);
+    }
+  }, [isCompiling, clearDiagnostics, addLog, files, network, setDiagnostics]);
 
   const handleDeploy = useCallback(() => {
     setTerminalExpanded(true);
@@ -276,7 +282,7 @@ const Index = () => {
     setTerminalExpanded(true);
     addLog("info", "Running tests...");
     setTimeout(() => {
-      addLog("success", "✓ test_hello ... ok");
+      addLog("success", "test_hello ... ok");
       addLog("info", "test result: ok. 1 passed; 0 failed;");
     }, 1200);
   }, [addLog]);
@@ -285,13 +291,15 @@ const Index = () => {
     (fn: string, args: string) => {
       setTerminalExpanded(true);
       addLog("info", `Invoking ${fn}(${args})...`);
-      setTimeout(() => addLog("success", `✓ Result: ["Hello", "Dev"]`), 800);
+      setTimeout(() => addLog("success", 'Result: ["Hello", "Dev"]'), 800);
     },
     [addLog]
   );
 
   useEffect(() => {
-    const onBuild = () => handleCompile();
+    const onBuild = () => {
+      void handleCompile();
+    };
     const onDeploy = () => handleDeploy();
     const onTest = () => handleTest();
 
@@ -306,44 +314,34 @@ const Index = () => {
     };
   }, [handleCompile, handleDeploy, handleTest]);
 
-  const getActiveContent = () => {
-    const activeFile = findNode(files, activeTabPath);
+  const activeFile = findNode(files, activeTabPath);
+  const language = activeFile?.language || "rust";
 
-    return {
-      content: activeFile?.content || "",
-      language: activeFile?.language || "rust",
-    };
-  };
-
-  const { content, language } = getActiveContent();
-  
-
-  // Tabs with unsaved markers
   const tabsWithStatus = openTabs.map((t) => ({
     ...t,
     unsaved: unsavedFiles.has(t.path.join("/")),
   }));
 
   return (
-    <div className="h-screen flex flex-col overflow-hidden">
-      {/* Toolbar */}
+    <div className="flex h-screen flex-col overflow-hidden">
       <Toolbar
-        onCompile={handleCompile}
+        onCompile={() => {
+          void handleCompile();
+        }}
         onDeploy={handleDeploy}
         onTest={handleTest}
         isCompiling={isCompiling}
+        buildState={buildState}
         network={network}
         onNetworkChange={setNetwork}
         saveStatus={saveStatus}
       />
 
-      {/* Main area */}
-      <div className="flex-1 flex overflow-hidden relative">
-        {/* Left Toggle Bar */}
-        <div className="hidden md:flex flex-col bg-sidebar border-r border-border shrink-0 z-10">
+      <div className="relative flex flex-1 overflow-hidden">
+        <div className="hidden shrink-0 flex-col border-r border-border bg-sidebar md:flex">
           <button
             onClick={() => setShowExplorer(!showExplorer)}
-            className="p-2 text-muted-foreground hover:text-foreground transition-colors"
+            className="p-2 text-muted-foreground transition-colors hover:text-foreground"
             title="Toggle Explorer"
           >
             {showExplorer ? (
@@ -354,12 +352,11 @@ const Index = () => {
           </button>
         </div>
 
-        {/* Mobile overlay panels */}
         {mobilePanel === "explorer" && (
-          <div className="md:hidden absolute inset-0 z-30 flex">
-            <div className="w-64 bg-sidebar border-r border-border h-full">
-              <div className="flex items-center justify-between px-3 py-2 border-b border-border">
-                <span className="text-xs font-semibold text-muted-foreground uppercase">
+          <div className="absolute inset-0 z-30 flex md:hidden">
+            <div className="h-full w-64 border-r border-border bg-sidebar">
+              <div className="flex items-center justify-between border-b border-border px-3 py-2">
+                <span className="text-xs font-semibold uppercase text-muted-foreground">
                   Explorer
                 </span>
                 <button
@@ -388,7 +385,7 @@ const Index = () => {
         )}
 
         {mobilePanel === "interact" && (
-          <div className="md:hidden absolute inset-0 z-30 flex justify-end">
+          <div className="absolute inset-0 z-30 flex justify-end md:hidden">
             <div
               className="flex-1 bg-background/60"
               onClick={() => setMobilePanel("none")}
@@ -416,8 +413,7 @@ const Index = () => {
           </div>
         )}
 
-        {/* Resizable Layout for Desktop Content */}
-        <div className="flex-1 flex overflow-hidden">
+        <div className="flex flex-1 overflow-hidden">
           <ResizablePanelGroup direction="horizontal" autoSaveId="ide-main-layout">
             {showExplorer && (
               <>
@@ -449,7 +445,7 @@ const Index = () => {
               id="main-content"
               order={2}
               minSize={30}
-              className="flex flex-col min-w-0"
+              className="flex min-w-0 flex-col"
             >
               <ResizablePanelGroup direction="vertical" autoSaveId="ide-editor-terminal">
                 <ResizablePanel
@@ -457,7 +453,7 @@ const Index = () => {
                   order={1}
                   defaultSize={75}
                   minSize={30}
-                  className="flex flex-col min-w-0"
+                  className="flex min-w-0 flex-col"
                 >
                   <EditorTabs
                     tabs={tabsWithStatus}
@@ -466,9 +462,9 @@ const Index = () => {
                     onTabClose={handleTabClose}
                   />
                   <div className="flex-1 overflow-hidden">
-                  <CodeEditor
-                    onCursorChange={(line, col) => setCursorPos({ line, col })}
-                     onSave={handleSave}
+                    <CodeEditor
+                      onCursorChange={(line, col) => setCursorPos({ line, col })}
+                      onSave={handleSave}
                     />
                   </div>
                 </ResizablePanel>
@@ -481,7 +477,7 @@ const Index = () => {
                       order={2}
                       defaultSize={25}
                       minSize={10}
-                      className="flex flex-col min-w-0"
+                      className="flex min-w-0 flex-col"
                     >
                       <Terminal
                         logs={logs}
@@ -492,7 +488,7 @@ const Index = () => {
                     </ResizablePanel>
                   </>
                 ) : (
-                  <div className="shrink-0 flex flex-col min-w-0">
+                  <div className="shrink-0 min-w-0">
                     <Terminal
                       logs={logs}
                       isExpanded={terminalExpanded}
@@ -506,8 +502,7 @@ const Index = () => {
           </ResizablePanelGroup>
         </div>
 
-        {/* Desktop contract panel */}
-        <div className="hidden md:flex shrink-0 z-10">
+        <div className="hidden shrink-0 z-10 md:flex">
           {showPanel && (
             <div className="w-64 border-l border-border bg-card flex flex-col h-full overflow-hidden">
               <div className="flex-shrink-0">
@@ -518,23 +513,19 @@ const Index = () => {
               </div>
             </div>
           )}
-          <div className="flex flex-col bg-card border-l border-border h-full">
+          <div className="flex flex-col bg-card border-l border-border h-full w-72">
+            <IdentityCard />
             <button
               onClick={() => setShowPanel(!showPanel)}
-              className="p-2 text-muted-foreground hover:text-foreground transition-colors"
-              title="Toggle Panel"
+              className="mt-auto p-2 text-muted-foreground hover:text-foreground transition-colors"
+              title="Toggle Interact Panel"
             >
-              {showPanel ? (
-                <PanelRightClose className="h-4 w-4" />
-              ) : (
-                <PanelRightOpen className="h-4 w-4" />
-              )}
+              {showPanel ? <PanelRightClose className="h-4 w-4" /> : <PanelRightOpen className="h-4 w-4" />}
             </button>
           </div>
         </div>
       </div>
 
-      {/* Status Bar - Desktop */}
       <div className="hidden md:block">
         <StatusBar
           language={language}
@@ -549,11 +540,9 @@ const Index = () => {
         />
       </div>
 
-      {/* Mobile bottom tab bar */}
-      <div className="md:hidden flex flex-col border-t border-border bg-sidebar">
-        {/* Status row */}
-        <div className="flex items-center justify-between px-3 py-1 border-b border-border/50 bg-muted/30">
-          <div className="flex items-center gap-2 text-[10px] text-muted-foreground font-mono">
+      <div className="flex flex-col border-t border-border bg-sidebar md:hidden">
+        <div className="flex items-center justify-between border-b border-border/50 bg-muted/30 px-3 py-1">
+          <div className="flex items-center gap-2 font-mono text-[10px] text-muted-foreground">
             {unsavedFiles.size > 0 && (
               <span className="text-warning">{unsavedFiles.size} unsaved</span>
             )}
@@ -561,20 +550,19 @@ const Index = () => {
               Ln {cursorPos.line}, Col {cursorPos.col}
             </span>
           </div>
-          <span className="text-[10px] text-muted-foreground font-mono">
+          <span className="font-mono text-[10px] text-muted-foreground">
             {network}
           </span>
         </div>
 
-        {/* Tab buttons */}
         <div className="flex items-stretch">
           <button
             onClick={() =>
               setMobilePanel(mobilePanel === "explorer" ? "none" : "explorer")
             }
-            className={`flex-1 flex flex-col items-center gap-0.5 py-2.5 text-[10px] font-medium transition-colors border-t-2 ${
+            className={`flex-1 flex flex-col items-center gap-0.5 border-t-2 py-2.5 text-[10px] font-medium transition-colors ${
               mobilePanel === "explorer"
-                ? "border-primary text-primary bg-primary/5"
+                ? "border-primary bg-primary/5 text-primary"
                 : "border-transparent text-muted-foreground hover:text-foreground"
             }`}
           >
@@ -584,9 +572,9 @@ const Index = () => {
 
           <button
             onClick={() => setMobilePanel("none")}
-            className={`flex-1 flex flex-col items-center gap-0.5 py-2.5 text-[10px] font-medium transition-colors border-t-2 ${
+            className={`flex-1 flex flex-col items-center gap-0.5 border-t-2 py-2.5 text-[10px] font-medium transition-colors ${
               mobilePanel === "none"
-                ? "border-primary text-primary bg-primary/5"
+                ? "border-primary bg-primary/5 text-primary"
                 : "border-transparent text-muted-foreground hover:text-foreground"
             }`}
           >
@@ -598,9 +586,9 @@ const Index = () => {
             onClick={() =>
               setMobilePanel(mobilePanel === "interact" ? "none" : "interact")
             }
-            className={`flex-1 flex flex-col items-center gap-0.5 py-2.5 text-[10px] font-medium transition-colors border-t-2 ${
+            className={`flex-1 flex flex-col items-center gap-0.5 border-t-2 py-2.5 text-[10px] font-medium transition-colors ${
               mobilePanel === "interact"
-                ? "border-primary text-primary bg-primary/5"
+                ? "border-primary bg-primary/5 text-primary"
                 : "border-transparent text-muted-foreground hover:text-foreground"
             }`}
           >
@@ -613,9 +601,9 @@ const Index = () => {
               setTerminalExpanded(!terminalExpanded);
               setMobilePanel("none");
             }}
-            className={`flex-1 flex flex-col items-center gap-0.5 py-2.5 text-[10px] font-medium transition-colors border-t-2 ${
+            className={`flex-1 flex flex-col items-center gap-0.5 border-t-2 py-2.5 text-[10px] font-medium transition-colors ${
               terminalExpanded
-                ? "border-primary text-primary bg-primary/5"
+                ? "border-primary bg-primary/5 text-primary"
                 : "border-transparent text-muted-foreground hover:text-foreground"
             }`}
           >
