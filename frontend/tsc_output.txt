@@ -1,0 +1,4 @@
+.next/dev/types/validator.ts(24,44): error TS2344: Type 'Route' does not satisfy the constraint 'never'.
+  Type '"/"' is not assignable to type 'never'.
+.next/dev/types/validator.ts(24,75): error TS2344: Type 'Route' does not satisfy the constraint 'never'.
+  Type '"/"' is not assignable to type 'never'.
