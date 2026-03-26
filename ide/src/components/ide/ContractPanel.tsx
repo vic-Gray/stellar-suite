@@ -1,6 +1,8 @@
 import { useState } from "react";
-import { Rocket, Copy, ExternalLink, UserPlus, ShieldAlert, Key, Trash2 } from "lucide-react";
+import { Rocket, Copy, ExternalLink, UserPlus, ShieldAlert, Key, Trash2, Download } from "lucide-react";
 import { useIdentityStore } from "@/store/useIdentityStore";
+import { useFileStore } from "@/store/useFileStore";
+import { createBindingsExportFromWorkspace, downloadBindingsFile } from "@/lib/bindingsGenerator";
 import {
   Select,
   SelectContent,
@@ -23,6 +25,7 @@ export function ContractPanel({ contractId, onInvoke }: ContractPanelProps) {
   const [newNickname, setNewNickname] = useState("");
 
   const { identities, activeContext, setActiveContext, generateNewIdentity, deleteIdentity } = useIdentityStore();
+  const { files, activeTabPath } = useFileStore();
 
   const handleGenerate = async () => {
     if (!newNickname.trim()) return;
@@ -41,6 +44,17 @@ export function ContractPanel({ contractId, onInvoke }: ContractPanelProps) {
   const copyToClipboard = (text: string, label: string) => {
     navigator.clipboard.writeText(text);
     toast.success(`${label} copied to clipboard`);
+  };
+
+  const handleExportBindings = () => {
+    try {
+      const result = createBindingsExportFromWorkspace(files, activeTabPath);
+      downloadBindingsFile(result);
+      toast.success(`Exported ${result.filename} using ${result.mode} generation`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unable to export JS bindings";
+      toast.error(message);
+    }
   };
 
   return (
@@ -235,6 +249,13 @@ export function ContractPanel({ contractId, onInvoke }: ContractPanelProps) {
             </div>
 
             <div className="border-t border-border pt-3 space-y-2">
+              <button
+                onClick={handleExportBindings}
+                className="w-full flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-medium rounded border border-border bg-muted text-foreground hover:bg-muted/80 transition-colors"
+              >
+                <Download className="h-3.5 w-3.5" />
+                Export JS Bindings
+              </button>
               <p className="text-[10px] md:text-xs text-muted-foreground font-semibold uppercase tracking-wider">Resources</p>
               <a href="https://soroban.stellar.org/docs" target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 text-[10px] md:text-xs text-primary hover:underline">
                 <ExternalLink className="h-3 w-3" />
