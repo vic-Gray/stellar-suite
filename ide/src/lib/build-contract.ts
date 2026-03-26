@@ -50,7 +50,8 @@ const flattenFiles = (nodes: FileNode[], parentPath = ""): WorkspaceFile[] =>
 
 const stringifyOutput = (value: unknown) => {
   if (typeof value === "string") return value;
-  if (Array.isArray(value)) return value.map(stringifyOutput).filter(Boolean).join("\n");
+  if (Array.isArray(value))
+    return value.map(stringifyOutput).filter(Boolean).join("\n");
   if (value == null) return "";
   if (typeof value === "object") return JSON.stringify(value);
   return String(value);
@@ -58,17 +59,17 @@ const stringifyOutput = (value: unknown) => {
 
 export const createBuildWorkspacePayload = (
   files: FileNode[],
-  network: string
+  network: string,
 ): BuildWorkspacePayload => ({
   files: flattenFiles(files),
   network,
 });
 
 export async function compileWorkspace(
-  payload: BuildWorkspacePayload
+  payload: BuildWorkspacePayload,
 ): Promise<CompileResult> {
   const response = await fetch(
-    import.meta.env.VITE_COMPILE_API_URL || DEFAULT_COMPILE_API_URL,
+    process.env.NEXT_PUBLIC_COMPILE_API_URL || DEFAULT_COMPILE_API_URL,
     {
       method: "POST",
       headers: {
@@ -76,14 +77,15 @@ export async function compileWorkspace(
         Accept: "application/json, text/plain",
       },
       body: JSON.stringify(payload),
-    }
+    },
   );
 
   const responseBody = await response.text();
 
   if (!response.ok) {
     const message =
-      responseBody.trim() || `Compile request failed with status ${response.status}`;
+      responseBody.trim() ||
+      `Compile request failed with status ${response.status}`;
 
     throw new CompileRequestError(message, response.status, responseBody);
   }

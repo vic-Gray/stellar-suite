@@ -1,17 +1,16 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
-import { TooltipProvider } from "@/components/ui/tooltip";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
-import { CommandPalette } from "./components/ide/CommandPalette";
-import Index from "./pages/Index";
-import NotFound from "./pages/NotFound";
+import { CommandPalette } from "@/components/ide/CommandPalette";
+import Index from "@/features/ide/Index";
 
-const queryClient = new QueryClient();
-
-const App = () => {
+export default function HomePage() {
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
+  const [queryClient] = useState(() => new QueryClient());
 
   useEffect(() => {
     const handleGlobalShortcuts = (event: KeyboardEvent) => {
@@ -39,17 +38,9 @@ const App = () => {
       <TooltipProvider>
         <Toaster />
         <Sonner />
-        <BrowserRouter>
-          <Routes>
-            <Route path="/" element={<Index />} />
-            {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-            <Route path="*" element={<NotFound />} />
-          </Routes>
-        </BrowserRouter>
+        <Index />
         <CommandPalette open={commandPaletteOpen} onOpenChange={setCommandPaletteOpen} />
       </TooltipProvider>
     </QueryClientProvider>
   );
-};
-
-export default App;
+}

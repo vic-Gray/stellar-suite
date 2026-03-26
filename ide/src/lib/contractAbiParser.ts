@@ -116,7 +116,7 @@ const parseJsonFunctionSpecs = (rawValue: unknown): FunctionSpec[] => {
   if (!Array.isArray(root)) return [];
 
   return root
-    .map((entry) => {
+    .map((entry): FunctionSpec | null => {
       if (!entry || typeof entry !== "object") return null;
       const record = entry as Record<string, unknown>;
       const name =
@@ -171,7 +171,7 @@ const parseJsonFunctionSpecs = (rawValue: unknown): FunctionSpec[] => {
         })),
       } satisfies FunctionSpec;
     })
-    .filter((entry): entry is FunctionSpec => Boolean(entry));
+    .filter((entry): entry is FunctionSpec => entry !== null);
 };
 
 const describeSpecType = (typeDef: xdr.ScSpecTypeDef): string => {

@@ -1,3 +1,5 @@
+"use client";
+
 import { DragEvent, useCallback, useEffect, useRef, useState } from "react";
 import { FileExplorer } from "@/components/ide/FileExplorer";
 import { EditorTabs } from "@/components/ide/EditorTabs";
@@ -35,7 +37,7 @@ import {
   X,
 } from "lucide-react";
 
-const COMPILE_API_URL = import.meta.env.VITE_COMPILE_API_URL ?? "/api/compile";
+const COMPILE_API_URL = process.env.NEXT_PUBLIC_COMPILE_API_URL ?? "/api/compile";
 
 type BuildState = "idle" | "building" | "success" | "error";
 
