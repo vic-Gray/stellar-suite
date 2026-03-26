@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { 
   Trash2, 
-  Copy, 
   Plus, 
   Search, 
   Globe, 
@@ -13,6 +12,7 @@ import { useDeployedContractsStore } from "@/store/useDeployedContractsStore";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { NetworkKey } from "@/lib/networkConfig";
+import { CopyToClipboard } from "@/components/ide/CopyToClipboard";
 
 interface DeploymentsViewProps {
   activeContractId: string | null;
@@ -48,12 +48,6 @@ export function DeploymentsView({ activeContractId, onSelectContract }: Deployme
     setNewId("");
     setNewName("");
     setIsAdding(false);
-  };
-
-  const copyToClipboard = (text: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    navigator.clipboard.writeText(text);
-    toast.success("Contract ID copied");
   };
 
   const handleDelete = (id: string, e: React.MouseEvent) => {
@@ -190,13 +184,14 @@ export function DeploymentsView({ activeContractId, onSelectContract }: Deployme
                     </div>
                     <div className="flex items-center gap-1 font-mono text-[9px] text-muted-foreground group-hover:text-muted-foreground/80 transition-colors">
                       <span>{truncateId(contract.id)}</span>
-                      <button 
-                        onClick={(e) => copyToClipboard(contract.id, e)}
-                        className="p-0.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground opacity-0 group-hover:opacity-100 transition-all"
+                      <CopyToClipboard
+                        text={contract.id}
+                        label="Copy contract ID"
+                        copiedLabel="Copied!"
+                        onClick={(e) => e.stopPropagation()}
+                        className="p-0.5 opacity-0 group-hover:opacity-100 transition-all"
                         title="Copy Contract ID"
-                      >
-                        <Copy className="h-2.5 w-2.5" />
-                      </button>
+                      />
                     </div>
                   </div>
                   

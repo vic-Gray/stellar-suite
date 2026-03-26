@@ -1,9 +1,19 @@
 import { useState } from "react";
-import { Rocket, Copy, ExternalLink, UserPlus, ShieldAlert, Key, Trash2, Braces, Download } from "lucide-react";
+import { Rocket, ExternalLink, UserPlus, ShieldAlert, Key, Trash2, Braces, Download, ReceiptText, FileCode2 } from "lucide-react";
 import { useIdentityStore } from "@/store/useIdentityStore";
 import { useFileStore } from "@/store/useFileStore";
 import { resolveContractSchema } from "@/lib/contractAbiParser";
 import { createBindingsExportFromWorkspace, downloadBindingsFile } from "@/lib/bindingsGenerator";
+import type { InvocationDebugData } from "@/lib/invokeResult";
+import { CopyToClipboard } from "@/components/ide/CopyToClipboard";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import {
   Select,
   SelectContent,
@@ -16,9 +26,10 @@ import { toast } from "sonner";
 interface ContractPanelProps {
   contractId: string | null;
   onInvoke: (fn: string, args: string) => void;
+  lastInvocation?: InvocationDebugData | null;
 }
 
-export function ContractPanel({ contractId, onInvoke }: ContractPanelProps) {
+export function ContractPanel({ contractId, onInvoke, lastInvocation = null }: ContractPanelProps) {
   const [fnName, setFnName] = useState("hello");
   const [args, setArgs] = useState('"Dev"');
   const [showManager, setShowManager] = useState(false);
@@ -43,11 +54,6 @@ export function ContractPanel({ contractId, onInvoke }: ContractPanelProps) {
       toast.error("Failed to generate identity");
       console.error(error);
     }
-  };
-
-  const copyToClipboard = (text: string, label: string) => {
-    navigator.clipboard.writeText(text);
-    toast.success(`${label} copied to clipboard`);
   };
 
   const handleResolveAbi = async () => {
@@ -177,9 +183,12 @@ export function ContractPanel({ contractId, onInvoke }: ContractPanelProps) {
                     <div className="space-y-1">
                       <div className="flex items-center justify-between gap-2 overflow-hidden">
                         <span className="text-[9px] text-muted-foreground font-mono truncate">{id.publicKey}</span>
-                        <button onClick={() => copyToClipboard(id.publicKey, "Public Key")} className="shrink-0 p-0.5 hover:bg-muted rounded text-muted-foreground">
-                          <Copy className="h-2.5 w-2.5" />
-                        </button>
+                        <CopyToClipboard
+                          text={id.publicKey}
+                          label="Copy public key"
+                          copiedLabel="Copied!"
+                          className="shrink-0 p-0.5"
+                        />
                       </div>
                     </div>
                   </div>
@@ -229,9 +238,7 @@ export function ContractPanel({ contractId, onInvoke }: ContractPanelProps) {
                   <code className="text-[10px] md:text-xs bg-muted px-2 py-1 rounded font-mono text-primary truncate flex-1">
                     {contractId}
                   </code>
-                  <button onClick={() => copyToClipboard(contractId, "Contract ID")} className="p-1 hover:bg-muted rounded text-muted-foreground hover:text-foreground transition-colors">
-                    <Copy className="h-3 w-3" />
-                  </button>
+                  <CopyToClipboard text={contractId} label="Copy contract ID" copiedLabel="Copied!" />
                 </div>
               ) : (
                 <p className="text-[10px] md:text-xs text-muted-foreground/50 italic">No contract deployed</p>
@@ -276,6 +283,111 @@ export function ContractPanel({ contractId, onInvoke }: ContractPanelProps) {
               )}
             </div>
 
+            {lastInvocation && (
+              <div className="rounded-md border border-primary/20 bg-primary/5 p-3 space-y-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-primary">
+                      <ReceiptText className="h-3.5 w-3.5" />
+                      Invocation Result
+                    </div>
+                    <p className="text-[10px] text-muted-foreground">
+                      {lastInvocation.functionName} on {lastInvocation.network} by {lastInvocation.signer}
+                    </p>
+                  </div>
+                  <CopyToClipboard
+                    text={lastInvocation.result}
+                    label="Copy result"
+                    copiedLabel="Copied!"
+                    className="opacity-80 hover:opacity-100"
+                  />
+                </div>
+
+                <pre className="max-h-28 overflow-auto rounded bg-background px-2 py-2 text-[10px] leading-relaxed text-foreground">
+                  {lastInvocation.result}
+                </pre>
+
+                <div className="flex items-center justify-between gap-2 rounded border border-border/80 bg-background/60 px-2.5 py-2">
+                  <div>
+                    <p className="text-[10px] font-semibold text-foreground">Raw XDR Debug View</p>
+                    <p className="text-[9px] text-muted-foreground">
+                      Inspect or copy the final unsigned and signed Base64 envelopes.
+                    </p>
+                  </div>
+
+                  <Dialog>
+                    <DialogTrigger asChild>
+                      <button className="inline-flex items-center gap-1 rounded-md border border-border bg-muted px-2 py-1 text-[10px] font-medium text-foreground transition-colors hover:bg-muted/80">
+                        <FileCode2 className="h-3 w-3" />
+                        View XDR
+                      </button>
+                    </DialogTrigger>
+                    <DialogContent className="max-w-3xl border-border bg-card p-0">
+                      <DialogHeader className="border-b border-border px-5 py-4">
+                        <DialogTitle className="text-base">Invocation XDR Debug View</DialogTitle>
+                        <DialogDescription>
+                          Copy the invocation result or inspect the unsigned and signed Base64 payloads.
+                        </DialogDescription>
+                      </DialogHeader>
+
+                      <div className="grid gap-4 px-5 py-4">
+                        <div className="rounded-md border border-border bg-background/50 p-3">
+                          <div className="mb-2 flex items-center justify-between gap-2">
+                            <div>
+                              <p className="text-xs font-semibold text-foreground">Result Payload</p>
+                              <p className="text-[11px] text-muted-foreground">Useful for sharing execution output.</p>
+                            </div>
+                            <CopyToClipboard
+                              text={lastInvocation.result}
+                              label="Copy result"
+                              copiedLabel="Copied!"
+                            />
+                          </div>
+                          <pre className="max-h-28 overflow-auto whitespace-pre-wrap break-words rounded bg-background px-3 py-2 text-[11px] text-foreground">
+                            {lastInvocation.result}
+                          </pre>
+                        </div>
+
+                        <div className="rounded-md border border-border bg-background/50 p-3">
+                          <div className="mb-2 flex items-center justify-between gap-2">
+                            <div>
+                              <p className="text-xs font-semibold text-foreground">Unsigned Transaction XDR</p>
+                              <p className="text-[11px] text-muted-foreground">Base64 view before signing.</p>
+                            </div>
+                            <CopyToClipboard
+                              text={lastInvocation.unsignedXdr}
+                              label="Copy unsigned XDR"
+                              copiedLabel="Copied!"
+                            />
+                          </div>
+                          <pre className="max-h-40 overflow-auto whitespace-pre-wrap break-all rounded bg-background px-3 py-2 text-[11px] text-foreground">
+                            {lastInvocation.unsignedXdr}
+                          </pre>
+                        </div>
+
+                        <div className="rounded-md border border-border bg-background/50 p-3">
+                          <div className="mb-2 flex items-center justify-between gap-2">
+                            <div>
+                              <p className="text-xs font-semibold text-foreground">Signed Transaction XDR</p>
+                              <p className="text-[11px] text-muted-foreground">Base64 view after signing.</p>
+                            </div>
+                            <CopyToClipboard
+                              text={lastInvocation.signedXdr}
+                              label="Copy signed XDR"
+                              copiedLabel="Copied!"
+                            />
+                          </div>
+                          <pre className="max-h-40 overflow-auto whitespace-pre-wrap break-all rounded bg-background px-3 py-2 text-[11px] text-foreground">
+                            {lastInvocation.signedXdr}
+                          </pre>
+                        </div>
+                      </div>
+                    </DialogContent>
+                  </Dialog>
+                </div>
+              </div>
+            )}
+
             <div className="border-t border-border pt-3 space-y-2">
               <button
                 onClick={() => {
@@ -294,13 +406,7 @@ export function ContractPanel({ contractId, onInvoke }: ContractPanelProps) {
                       <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Contract Schema</p>
                       <p className="text-[9px] text-muted-foreground">{schemaSource}</p>
                     </div>
-                    <button
-                      onClick={() => copyToClipboard(schemaPreview, "Contract schema")}
-                      className="p-1 hover:bg-background rounded text-muted-foreground hover:text-foreground transition-colors"
-                      title="Copy ABI preview"
-                    >
-                      <Copy className="h-3 w-3" />
-                    </button>
+                    <CopyToClipboard text={schemaPreview} label="Copy ABI preview" copiedLabel="Copied!" title="Copy ABI preview" />
                   </div>
                   <pre className="max-h-40 overflow-auto rounded bg-background px-2 py-2 text-[9px] leading-relaxed text-foreground">
                     {schemaPreview}
@@ -331,4 +437,3 @@ export function ContractPanel({ contractId, onInvoke }: ContractPanelProps) {
     </div>
   );
 }
-

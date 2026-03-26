@@ -22,6 +22,7 @@ import { parseMixedOutput } from "@/utils/cargoParser";
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
 import { DeploymentsView } from "@/components/ide/DeploymentsView";
 import { useDeployedContractsStore } from "@/store/useDeployedContractsStore";
+import { createInvocationDebugData, type InvocationDebugData } from "@/lib/invokeResult";
 import {
   FileText,
   FolderTree,
@@ -83,6 +84,7 @@ const Index = () => {
   const [terminalOutput, setTerminalOutput] = useState("");
   const [isCompiling, setIsCompiling] = useState(false);
   const [contractId, setContractId] = useState<string | null>(null);
+  const [lastInvocation, setLastInvocation] = useState<InvocationDebugData | null>(null);
   const [showExplorer, setShowExplorer] = useState(false);
   const [showPanel, setShowPanel] = useState(false);
   const [cursorPos, setCursorPos] = useState({ line: 1, col: 1 });
@@ -267,10 +269,20 @@ const Index = () => {
           : activeIdentity?.nickname ?? "anonymous";
       appendTerminalOutput(`Invoking ${fn}(${args}) as ${signer}...\r\n`);
       setTimeout(() => {
-        appendTerminalOutput('Result: ["Hello", "Dev"]\r\n');
+        const result = '["Hello", "Dev"]';
+        appendTerminalOutput(`Result: ${result}\r\n`);
+        setLastInvocation(
+          createInvocationDebugData({
+            functionName: fn,
+            args,
+            signer,
+            network,
+            result,
+          })
+        );
       }, 800);
     },
-    [activeContext, activeIdentity, appendTerminalOutput]
+    [activeContext, activeIdentity, appendTerminalOutput, network]
   );
 
   const handleCreateFile = useCallback(
@@ -582,6 +594,7 @@ const Index = () => {
                 activeFile={activeFileContext}
                 contractId={contractId}
                 onInvoke={handleInvoke}
+                lastInvocation={lastInvocation}
               />
             </div>
           </div>
@@ -710,6 +723,7 @@ const Index = () => {
                 activeFile={activeFileContext}
                 contractId={contractId}
                 onInvoke={handleInvoke}
+                lastInvocation={lastInvocation}
               />
             </div>
           )}

@@ -15,13 +15,13 @@
  * A trash icon lets the user remove an entry from the local repo.
  */
 
-import { useState } from "react";
-import { Copy, Check, Trash2, Database } from "lucide-react";
+import { Trash2, Database } from "lucide-react";
 import {
   useDeployedContractsStore,
   DeployedContract,
 } from "@/store/useDeployedContractsStore";
 import { NetworkKey } from "@/lib/networkConfig";
+import { CopyToClipboard } from "@/components/ide/CopyToClipboard";
 
 // Network badge colours – keeps Mainnet visually distinct from Testnet
 const NETWORK_COLOURS: Record<NetworkKey, string> = {
@@ -46,17 +46,6 @@ function formatTimestamp(iso: string): string {
 
 function ContractCard({ contract }: { contract: DeployedContract }) {
   const removeContract = useDeployedContractsStore((s) => s.removeContract);
-  const [copied, setCopied] = useState(false);
-
-  const handleCopy = async () => {
-    try {
-      await navigator.clipboard.writeText(contract.id);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
-    } catch {
-      // clipboard not available (non-secure context)
-    }
-  };
 
   return (
     <div className="rounded border border-border bg-muted/40 p-2 space-y-1.5 hover:bg-muted/60 transition-colors">
@@ -86,17 +75,13 @@ function ContractCard({ contract }: { contract: DeployedContract }) {
         <code className="text-[10px] font-mono text-primary truncate flex-1 bg-background/60 px-1.5 py-0.5 rounded">
           {contract.id}
         </code>
-        <button
-          onClick={handleCopy}
+        <CopyToClipboard
+          text={contract.id}
+          label="Copy contract ID"
+          copiedLabel="Copied!"
           title="Copy contract ID"
-          className="p-0.5 rounded text-muted-foreground hover:text-foreground transition-colors shrink-0"
-        >
-          {copied ? (
-            <Check className="h-3 w-3 text-green-400" />
-          ) : (
-            <Copy className="h-3 w-3" />
-          )}
-        </button>
+          className="shrink-0 p-0.5"
+        />
       </div>
 
       {/* Timestamp */}

@@ -6,11 +6,13 @@ import { Bot, Rocket } from "lucide-react";
 import { AIChatPane } from "@/components/ide/AIChatPane";
 import { ContractPanel } from "@/components/ide/ContractPanel";
 import type { ActiveFileContext } from "@/lib/ai-chat";
+import type { InvocationDebugData } from "@/lib/invokeResult";
 
 interface AssistantSidebarProps {
   activeFile: ActiveFileContext | null;
   contractId: string | null;
   onInvoke: (fn: string, args: string) => void;
+  lastInvocation?: InvocationDebugData | null;
 }
 
 type AssistantTab = "interact" | "ai";
@@ -19,6 +21,7 @@ export function AssistantSidebar({
   activeFile,
   contractId,
   onInvoke,
+  lastInvocation = null,
 }: AssistantSidebarProps) {
   const [activeTab, setActiveTab] = useState<AssistantTab>("ai");
 
@@ -53,7 +56,7 @@ export function AssistantSidebar({
 
       <div className="min-h-0 flex-1">
         {activeTab === "interact" ? (
-          <ContractPanel contractId={contractId} onInvoke={onInvoke} />
+          <ContractPanel contractId={contractId} onInvoke={onInvoke} lastInvocation={lastInvocation} />
         ) : (
           <AIChatPane activeFile={activeFile} />
         )}
