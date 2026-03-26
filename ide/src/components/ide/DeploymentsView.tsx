@@ -81,7 +81,7 @@ export function DeploymentsView({ activeContractId, onSelectContract }: Deployme
   };
 
   return (
-    <div className="h-full bg-sidebar flex flex-col overflow-hidden animate-in fade-in duration-300">
+    <div id="tour-deploy-sidebar" className="h-full bg-sidebar flex flex-col overflow-hidden animate-in fade-in duration-300">
       <div className="px-3 py-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground border-b border-sidebar-border flex items-center justify-between">
         <div className="flex items-center gap-1.5">
           <History className="h-3.5 w-3.5" />

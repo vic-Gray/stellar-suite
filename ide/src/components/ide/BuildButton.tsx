@@ -43,6 +43,7 @@ export function BuildButton({
     <Tooltip>
       <TooltipTrigger asChild>
         <Button
+          id="tour-build-btn"
           type="button"
           onClick={onClick}
           disabled={isBuilding}

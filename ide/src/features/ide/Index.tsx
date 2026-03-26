@@ -7,6 +7,7 @@ import CodeEditor from "@/components/ide/CodeEditor";
 import { Terminal } from "@/components/ide/Terminal";
 import { ContractPanel } from "@/components/ide/ContractPanel";
 import { IdentitiesView } from "@/components/ide/IdentitiesView";
+import { ProductTour } from "@/components/ide/ProductTour";
 import { StatusBar } from "@/components/ide/StatusBar";
 import { SearchPane } from "@/components/ide/SearchPane";
 import { IdeShell } from "@/components/layout/IdeShell";
@@ -394,10 +395,16 @@ const Index = () => {
 
   return (
     <div className="h-screen flex flex-col overflow-hidden">
+      <ProductTour />
       <Toolbar
         onCompile={handleCompile}
         onDeploy={handleDeploy}
         onTest={handleTest}
+        isCompiling={isCompiling}
+        buildState={isCompiling ? "building" : "idle"}
+        network={network}
+        onNetworkChange={setNetwork}
+        saveStatus={saveStatus}
       />
 
     <IdeShell

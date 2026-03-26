@@ -330,7 +330,12 @@ export function FileExplorer({
 
   return (
     <div
-      className={`h-full bg-sidebar flex flex-col ${isExplorerDragActive ? "ring-2 ring-primary/60 ring-inset" : ""}`}
+      id="tour-explorer"
+      className={`h-full bg-sidebar flex flex-col ${isDragActive ? "ring-2 ring-primary/60 ring-inset" : ""}` ${isExplorerDragActive ? "ring-2 ring-primary/60 ring-inset" : ""}}
+      onDragEnter={onDragEnter}
+      onDragOver={onDragOver}
+      onDragLeave={onDragLeave}
+      onDrop={onDrop}
     >
       <div className="px-3 py-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground border-b border-sidebar-border flex items-center justify-between">
         <span>Explorer</span>

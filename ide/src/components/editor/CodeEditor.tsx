@@ -170,7 +170,7 @@ monaco.languages.registerCompletionItemProvider('rust', {
   }
 
   return (
-    <div className="h-full w-full overflow-hidden relative border-t border-border">
+    <div id="tour-monaco" className="h-full w-full overflow-hidden relative border-t border-border">
       <Suspense
         fallback={
           <div className="h-full flex items-center justify-center bg-[#1e1e2e] text-muted-foreground font-mono text-xs">
