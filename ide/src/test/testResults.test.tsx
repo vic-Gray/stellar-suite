@@ -64,12 +64,14 @@ describe("TestResultsLog", () => {
       .find((node): node is HTMLButtonElement => node instanceof HTMLButtonElement);
     expect(traceButton).toBeTruthy();
 
-    fireEvent.click(traceButton);
-    expect(onOpenTrace).toHaveBeenCalledWith(
-      "hello_world/src/test.rs",
-      expect.any(Number),
-      5
-    );
+    if (traceButton) {
+      fireEvent.click(traceButton);
+      expect(onOpenTrace).toHaveBeenCalledWith(
+        "hello_world/src/test.rs",
+        expect.any(Number),
+        5
+      );
+    }
 
     fireEvent.click(screen.getByRole("button", { name: /rerun failed/i }));
     expect(onRerunFailed).toHaveBeenCalledTimes(1);
