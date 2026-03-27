@@ -21,6 +21,7 @@ const CodeEditor: React.FC<CodeEditorProps> = ({ onCursorChange, onSave }) => {
   const rustProviderRegistered = useRef(false);
   const monacoRef = useRef<typeof Monaco | null>(null);
   const editorRef = useRef<Monaco.editor.IStandaloneCodeEditor | null>(null);
+  const semanticProviderRegistered = useRef(false);
 
   const activeFile = React.useMemo(() => {
     const findNode = (
@@ -123,8 +124,111 @@ const CodeEditor: React.FC<CodeEditorProps> = ({ onCursorChange, onSave }) => {
         "editorIndentGuide.background": "#313244",
         "editorIndentGuide.activeBackground": "#45475a",
       },
+      encodedSemanticsColors: {
+        // Semantic token colors for different classifications
+        "semanticHighlighting.variable": "#89b4fa", // Light blue for variables
+        "semanticHighlighting.constant": "#f9e2af", // Yellow for constants (SHOUTY_CASE)
+        "semanticHighlighting.mutableVariable": "#eba0ac", // Light red for mutable variables
+        "semanticHighlighting.customType": "#94e2d5", // Teal for custom types
+        "semanticHighlighting.struct": "#a6e3a1", // Green for structs
+        "semanticHighlighting.enum": "#f38ba8", // Pink for enums
+        "semanticHighlighting.trait": "#cba6f7", // Purple for traits
+        "semanticHighlighting.function": "#b4befe", // Lavender for functions
+        "semanticHighlighting.macro": "#fab387", // Orange for macros
+        "semanticHighlighting.lifetime": "#6c7086", // Gray for lifetimes
+      },
     });
     monaco.editor.setTheme("stellar-dark");
+
+    // Register semantic tokens provider for Rust
+    if (!semanticProviderRegistered.current) {
+      semanticProviderRegistered.current = true;
+
+      const semanticProvider = new RustSemanticTokensProvider();
+      const legend = semanticProvider.getLegend();
+
+      // Register semantic tokens provider
+      monaco.languages.registerDocumentSemanticTokensProvider(
+        "rust",
+        semanticProvider,
+        legend,
+      );
+
+      // Define semantic token styling rules
+      monaco.editor.defineSemanticTokenRules("stellar-dark", [
+        // Constants (SHOUTY_CASE) - bright yellow/orange
+        {
+          token: legend.tokenTypes.indexOf("constant"),
+          foreground: "f9e2af", // Yellow
+          fontStyle: "bold",
+        },
+        // Mutable variables - light red with strikethrough effect
+        {
+          token: legend.tokenTypes.indexOf("mutableVariable"),
+          foreground: "eba0ac", // Light red
+          fontStyle: "underline", // Using underline instead of strikethrough for better readability
+        },
+        // Regular variables - light blue
+        {
+          token: legend.tokenTypes.indexOf("variable"),
+          foreground: "89b4fa", // Light blue
+        },
+        // Custom types (structs, enums, traits) - teal
+        {
+          token: legend.tokenTypes.indexOf("customType"),
+          foreground: "94e2d5", // Teal
+          fontStyle: "italic",
+        },
+        // Structs specifically - green
+        {
+          token: legend.tokenTypes.indexOf("struct"),
+          foreground: "a6e3a1", // Green
+          fontStyle: "bold",
+        },
+        // Enums specifically - pink
+        {
+          token: legend.tokenTypes.indexOf("enum"),
+          foreground: "f38ba8", // Pink
+          fontStyle: "bold",
+        },
+        // Traits specifically - purple
+        {
+          token: legend.tokenTypes.indexOf("trait"),
+          foreground: "cba6f7", // Purple
+          fontStyle: "italic",
+        },
+        // Functions - lavender
+        {
+          token: legend.tokenTypes.indexOf("function"),
+          foreground: "b4befe", // Lavender
+          fontStyle: "bold",
+        },
+        // Macros - orange
+        {
+          token: legend.tokenTypes.indexOf("macro"),
+          foreground: "fab387", // Orange
+          fontStyle: "bold",
+        },
+        // Lifetimes - gray
+        {
+          token: legend.tokenTypes.indexOf("lifetime"),
+          foreground: "6c7086", // Gray
+          fontStyle: "italic",
+        },
+        // Declaration modifier - underline
+        {
+          token: -1, // Applies to all tokens
+          modifiers: [legend.tokenModifiers.indexOf("declaration")],
+          fontStyle: "underline",
+        },
+        // Static modifier - italic
+        {
+          token: -1, // Applies to all tokens
+          modifiers: [legend.tokenModifiers.indexOf("static")],
+          fontStyle: "italic",
+        },
+      ]);
+    }
 
     if (!rustProviderRegistered.current) {
       rustProviderRegistered.current = true;

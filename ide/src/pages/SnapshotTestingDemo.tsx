@@ -1,11 +1,17 @@
-import { useState } from 'react';
-import { TestExplorer } from '@/components/ide/TestExplorer';
-import { SnapshotViewer } from '@/components/ide/SnapshotViewer';
-import { SnapshotDiffViewer } from '@/components/ide/SnapshotDiffViewer';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { snapshotManager } from '@/lib/testing/snapshotManager';
+import { SnapshotDiffViewer } from "@/components/ide/SnapshotDiffViewer";
+import { SnapshotViewer } from "@/components/ide/SnapshotViewer";
+import { TestExplorer } from "@/components/ide/TestExplorer";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { snapshotManager } from "@/lib/testing/snapshotManager";
+import { useState } from "react";
 
 /**
  * Demo page showcasing the Snapshot Testing feature
@@ -14,52 +20,52 @@ import { snapshotManager } from '@/lib/testing/snapshotManager';
 export function SnapshotTestingDemo() {
   const [showDiffViewer, setShowDiffViewer] = useState(false);
   const [demoData, setDemoData] = useState({
-    testPath: 'demo/example.test.ts',
-    testName: 'demo test',
+    testPath: "demo/example.test.ts",
+    testName: "demo test",
     diffs: [
       {
-        path: 'user.age',
+        path: "user.age",
         oldValue: 30,
         newValue: 31,
-        type: 'modified' as const,
+        type: "modified" as const,
       },
       {
-        path: 'user.email',
+        path: "user.email",
         oldValue: undefined,
-        newValue: 'user@example.com',
-        type: 'added' as const,
+        newValue: "user@example.com",
+        type: "added" as const,
       },
     ],
     oldValue: {
       user: {
-        name: 'Alice',
+        name: "Alice",
         age: 30,
       },
     },
     newValue: {
       user: {
-        name: 'Alice',
+        name: "Alice",
         age: 31,
-        email: 'user@example.com',
+        email: "user@example.com",
       },
     },
   });
 
   const handleCreateDemoSnapshot = async () => {
     const demoSnapshot = {
-      contractId: 'CCQWERTYUIOPASDFGHJKLZXCVBNM1234567890ABCDEF',
-      status: 'SUCCESS',
+      contractId: "CCQWERTYUIOPASDFGHJKLZXCVBNM1234567890ABCDEF",
+      status: "SUCCESS",
       ledger: 12345678,
       cost: {
-        cpuInsns: '5000000',
-        memBytes: '8192',
+        cpuInsns: "5000000",
+        memBytes: "8192",
       },
     };
 
     await snapshotManager.saveSnapshot(
-      'demo/contract.test.ts',
-      'demo contract deployment',
-      demoSnapshot
+      "demo/contract.test.ts",
+      "demo contract deployment",
+      demoSnapshot,
     );
   };
 
@@ -82,13 +88,17 @@ export function SnapshotTestingDemo() {
                 Show Diff Viewer Demo
               </Button>
             </div>
-            
+
             <div className="text-sm text-muted-foreground">
               <p>This demo showcases the three main components:</p>
               <ul className="list-disc list-inside mt-2 space-y-1">
-                <li>Test Explorer - Run tests and toggle snapshot update mode</li>
+                <li>
+                  Test Explorer - Run tests and toggle snapshot update mode
+                </li>
                 <li>Snapshot Viewer - Browse, preview, and manage snapshots</li>
-                <li>Snapshot Diff Viewer - Review and approve snapshot changes</li>
+                <li>
+                  Snapshot Diff Viewer - Review and approve snapshot changes
+                </li>
               </ul>
             </div>
           </div>
@@ -126,16 +136,16 @@ export function SnapshotTestingDemo() {
         </CardHeader>
         <CardContent>
           <pre className="bg-muted p-4 rounded-md text-sm overflow-x-auto">
-{`import { describe, it, expect } from 'vitest';
+            {`import { describe, it, expect } from 'vitest';
 
 describe('Contract Tests', () => {
   it('should match contract state snapshot', async () => {
     const contractState = {
       ledger: { sequence: 12345 },
-      storage: { 
+      storage: {
         entries: [
           { key: 'COUNTER', value: 42 }
-        ] 
+        ]
       },
     };
 
@@ -196,3 +206,5 @@ describe('Contract Tests', () => {
     </div>
   );
 }
+
+export default SnapshotTestingDemo;
