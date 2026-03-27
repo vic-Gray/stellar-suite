@@ -1,7 +1,9 @@
+import { useState } from "react";
 import { useWorkspaceStore } from "@/store/workspaceStore";
-import { FileText, GitBranch, AlertCircle } from "lucide-react";
+import { FileText, GitBranch, AlertCircle, ShieldOff } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { CommitForm } from "@/components/vcs/CommitForm";
+import { GitIgnoreEditor } from "@/components/vcs/GitIgnoreEditor";
 import { useVCSStore } from "@/store/vcsStore";
 import { type GitFileStatus } from "@/lib/vcs/gitService";
 
@@ -17,7 +19,10 @@ const statusTone: Record<GitFileStatus, string> = {
   deleted: "text-rose-400",
 };
 
+type GitPaneTab = "changes" | "gitignore";
+
 export function GitPane() {
+  const [activeTab, setActiveTab] = useState<GitPaneTab>("changes");
   const { unsavedFiles, setDiffViewPath } = useWorkspaceStore();
   const { localRepoInitialized, localStatusMap } = useVCSStore();
 
@@ -30,9 +35,41 @@ export function GitPane() {
     setDiffViewPath(path);
   };
 
-  const modifiedFiles = localRepoInitialized
-    ? Object.entries(localStatusMap).sort((a, b) => a[0].localeCompare(b[0]))
-    : Array.from(unsavedFiles).sort().map((path) => [path, "modified" as GitFileStatus]);
+  const modifiedFiles: [string, GitFileStatus][] = localRepoInitialized
+    ? (Object.entries(localStatusMap) as [string, GitFileStatus][]).sort((a, b) => a[0].localeCompare(b[0]))
+    : Array.from(unsavedFiles).sort().map((path): [string, GitFileStatus] => [path, "modified"]);
+
+  if (activeTab === "gitignore") {
+    return (
+      <div className="flex h-full flex-col bg-sidebar">
+        <div className="flex items-center justify-between border-b border-sidebar-border px-3 py-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+          <div className="flex items-center gap-2">
+            <GitBranch className="h-4 w-4" />
+            <span>Source Control</span>
+          </div>
+        </div>
+        <div className="flex border-b border-sidebar-border text-xs">
+          <button
+            type="button"
+            onClick={() => setActiveTab("changes")}
+            className="flex-1 py-2 text-muted-foreground hover:text-foreground transition-colors"
+          >
+            Changes
+          </button>
+          <button
+            type="button"
+            className="flex-1 py-2 border-b-2 border-primary text-primary font-semibold"
+          >
+            <span className="flex items-center justify-center gap-1">
+              <ShieldOff className="h-3 w-3" />
+              .gitignore
+            </span>
+          </button>
+        </div>
+        <GitIgnoreEditor />
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-full flex-col bg-sidebar">
@@ -41,6 +78,24 @@ export function GitPane() {
           <GitBranch className="h-4 w-4" />
           <span>Source Control</span>
         </div>
+      </div>
+      <div className="flex border-b border-sidebar-border text-xs">
+        <button
+          type="button"
+          className="flex-1 py-2 border-b-2 border-primary text-primary font-semibold"
+        >
+          Changes
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab("gitignore")}
+          className="flex-1 py-2 text-muted-foreground hover:text-foreground transition-colors"
+        >
+          <span className="flex items-center justify-center gap-1">
+            <ShieldOff className="h-3 w-3" />
+            .gitignore
+          </span>
+        </button>
       </div>
 
       <ScrollArea className="flex-1">
