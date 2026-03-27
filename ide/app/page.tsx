@@ -1,13 +1,14 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { TooltipProvider } from "@/components/ui/tooltip";
-import { Toaster } from "@/components/ui/toaster";
-import { Toaster as Sonner } from "@/components/ui/sonner";
 import { CommandPalette } from "@/components/ide/CommandPalette";
 import { MobileGatekeeper } from "@/components/ide/MobileGatekeeper";
-import Index from "@/features/ide/Index";
+import { QuickOpen } from "@/components/ide/QuickOpen";
+import { Toaster as Sonner } from "@/components/ui/sonner";
+import { Toaster } from "@/components/ui/toaster";
+import { TooltipProvider } from "@/components/ui/tooltip";
+import XdrInspector from "@/components/tools/XdrInspector";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { useEffect, useState } from "react";
 
 export default function HomePage() {
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
@@ -20,7 +21,11 @@ export default function HomePage() {
         setCommandPaletteOpen((prev) => !prev);
       }
 
-      if ((event.metaKey || event.ctrlKey) && event.shiftKey && event.key.toLowerCase() === "f") {
+      if (
+        (event.metaKey || event.ctrlKey) &&
+        event.shiftKey &&
+        event.key.toLowerCase() === "f"
+      ) {
         event.preventDefault();
         window.dispatchEvent(new Event("ide:open-search"));
       }
@@ -30,8 +35,23 @@ export default function HomePage() {
       }
     };
 
+    const handleToggleCommandPalette = () => {
+      setCommandPaletteOpen((prev) => !prev);
+    };
+
     window.addEventListener("keydown", handleGlobalShortcuts);
-    return () => window.removeEventListener("keydown", handleGlobalShortcuts);
+    window.addEventListener(
+      "ide:toggle-command-palette",
+      handleToggleCommandPalette,
+    );
+
+    return () => {
+      window.removeEventListener("keydown", handleGlobalShortcuts);
+      window.removeEventListener(
+        "ide:toggle-command-palette",
+        handleToggleCommandPalette,
+      );
+    };
   }, []);
 
   return (
@@ -40,8 +60,13 @@ export default function HomePage() {
         <Toaster />
         <Sonner />
         <MobileGatekeeper />
+        <XdrInspector />
         <Index />
-        <CommandPalette open={commandPaletteOpen} onOpenChange={setCommandPaletteOpen} />
+        <QuickOpen />
+        <CommandPalette
+          open={commandPaletteOpen}
+          onOpenChange={setCommandPaletteOpen}
+        />
       </TooltipProvider>
     </QueryClientProvider>
   );

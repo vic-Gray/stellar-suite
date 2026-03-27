@@ -26,14 +26,14 @@ import { toast } from "sonner";
 interface ContractPanelProps {
   contractId: string | null;
   onInvoke: (fn: string, args: string) => void;
-  lastInvocation?: InvocationDebugData | null;
   invokeState?: {
     phase: "idle" | "preparing" | "signing" | "submitting" | "confirming" | "success" | "failed";
     message: string;
   };
+  lastInvocation?: InvocationDebugData | null;
 }
 
-export function ContractPanel({ contractId, onInvoke, lastInvocation, invokeState }: ContractPanelProps) {
+export function ContractPanel({ contractId, onInvoke, invokeState, lastInvocation = null }: ContractPanelProps) {
   const [fnName, setFnName] = useState("hello");
   const [args, setArgs] = useState('"Dev"');
   const [showManager, setShowManager] = useState(false);
@@ -73,10 +73,15 @@ export function ContractPanel({ contractId, onInvoke, lastInvocation, invokeStat
         activeTabPath,
         rpcUrl,
         networkPassphrase,
+        network,
       });
 
       setSchemaPreview(result.preview);
-      setSchemaSource(result.source === "contract-id" ? `Fetched from ${rpcUrl}` : `Parsed from ${result.source}`);
+      setSchemaSource(
+        result.source === "contract-id"
+          ? `Fetched from ${result.rpcUrl ?? rpcUrl}`
+          : `Parsed from ${result.source}`,
+      );
       setFunctions(result.functions);
       toast.success(`Parsed ${result.functions.length} contract function${result.functions.length === 1 ? "" : "s"}`);
     } catch (error) {

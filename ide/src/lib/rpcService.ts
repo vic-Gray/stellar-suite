@@ -1,7 +1,12 @@
+import { ErrorTranslator, type TranslatedError } from "./errorTranslator";
+import type { NetworkKey } from "./networkConfig";
+import { fetchWithRpcFailover } from "./rpcFailover";
+
 export interface SimulationResult {
   success: boolean;
   result?: unknown;
   error?: string;
+  translatedError?: TranslatedError;
   resourceUsage?: {
     cpuInstructions?: number;
     memoryBytes?: number;
@@ -43,10 +48,12 @@ const normalizeResourceUsage = (value: unknown): SimulationResult["resourceUsage
 export class RpcService {
   private rpcUrl: string;
   private customHeaders: CustomHeaders;
+  private network?: NetworkKey;
 
-  constructor(rpcUrl: string, customHeaders: CustomHeaders = {}) {
+  constructor(rpcUrl: string, customHeaders: CustomHeaders = {}, network?: NetworkKey) {
     this.rpcUrl = rpcUrl.endsWith("/") ? rpcUrl.slice(0, -1) : rpcUrl;
     this.customHeaders = customHeaders;
+    this.network = network;
   }
 
   setCustomHeaders(headers: CustomHeaders): void {
@@ -74,20 +81,29 @@ export class RpcService {
         },
       };
 
-      const response = await fetch(`${this.rpcUrl}/rpc`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...this.customHeaders,
+      const { response, activeRpcUrl } = await fetchWithRpcFailover({
+        network: this.network,
+        primaryUrl: this.rpcUrl,
+        path: "/rpc",
+        timeoutMs: 30_000,
+        customHeaders: this.customHeaders,
+        init: {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(requestBody),
         },
-        body: JSON.stringify(requestBody),
-        signal: AbortSignal.timeout(30000),
       });
 
+      this.rpcUrl = activeRpcUrl;
+
       if (!response.ok) {
+        const errorMessage = `RPC request failed with status ${response.status}: ${response.statusText}`;
         return {
           success: false,
-          error: `RPC request failed with status ${response.status}: ${response.statusText}`,
+          error: errorMessage,
+          translatedError: ErrorTranslator.translate(errorMessage, { operation: "RPC request" }),
         };
       }
 
@@ -102,9 +118,15 @@ export class RpcService {
       } = await response.json();
 
       if (data.error) {
+        const errorMessage = data.error.message || "RPC error occurred";
         return {
           success: false,
-          error: data.error.message || "RPC error occurred",
+          error: errorMessage,
+          translatedError: ErrorTranslator.translate(errorMessage, { 
+            operation: "simulateTransaction",
+            functionName,
+            contractId,
+          }),
         };
       }
 
@@ -117,23 +139,28 @@ export class RpcService {
       };
     } catch (error) {
       if (error instanceof TypeError && error.message.includes("fetch")) {
+        const errorMessage = `Network error: Unable to reach RPC endpoint at ${this.rpcUrl}. Check your connection and rpcUrl setting.`;
         return {
           success: false,
-          error: `Network error: Unable to reach RPC endpoint at ${this.rpcUrl}. Check your connection and rpcUrl setting.`,
+          error: errorMessage,
+          translatedError: ErrorTranslator.translate(errorMessage, { operation: "Network request" }),
         };
       }
 
       if (error instanceof Error && error.name === "AbortError") {
+        const errorMessage = "Request timed out. The RPC endpoint may be slow or unreachable.";
         return {
           success: false,
-          error:
-            "Request timed out. The RPC endpoint may be slow or unreachable.",
+          error: errorMessage,
+          translatedError: ErrorTranslator.translate(errorMessage, { operation: "RPC request" }),
         };
       }
 
+      const errorMessage = error instanceof Error ? error.message : "Unknown error";
       return {
         success: false,
-        error: error instanceof Error ? error.message : "Unknown error",
+        error: errorMessage,
+        translatedError: ErrorTranslator.translate(errorMessage, { operation: "simulateTransaction" }),
       };
     }
   }

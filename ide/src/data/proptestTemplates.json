@@ -1,0 +1,35 @@
+[
+  {
+    "id": "tpl_basic_range",
+    "label": "Basic Range: value within bounds",
+    "description": "Asserts that a function's return value always stays within [min, max] for any input in that range. The canonical prop_assert! range check.",
+    "category": "range",
+    "requiredDeps": [
+      "proptest = { version = \"1\", default-features = false, features = [\"alloc\"] }",
+      "soroban-sdk = { workspace = true, features = [\"testutils\"] }"
+    ],
+    "code": "#[cfg(test)]\nmod prop_tests {\n    use super::*;\n    use proptest::prelude::*;\n    use soroban_sdk::{Env};\n\n    /// Property: the output of `clamp_value` must always satisfy\n    ///   min <= result <= max\n    /// for any (val, min, max) triple where min <= max.\n    proptest! {\n        #[test]\n        fn prop_value_within_bounds(\n            val in i64::MIN..=i64::MAX,\n            min in 0i64..=500_000i64,\n            max in 500_001i64..=1_000_000i64,\n        ) {\n            let env = Env::default();\n            env.mock_all_auths();\n            let contract_id = env.register(MyContract, ());\n            let client = MyContractClient::new(&env, &contract_id);\n\n            let result = client.clamp_value(&val, &min, &max);\n\n            prop_assert!(\n                result >= min && result <= max,\n                \"result {} must satisfy {} <= result <= {}\",\n                result, min, max\n            );\n        }\n    }\n}"
+  },
+  {
+    "id": "tpl_balance_never_negative",
+    "label": "Contract State: balance never drops below zero",
+    "description": "Verifies that no sequence of withdraw calls can make a token balance go negative. Tests the core safety invariant of any token or escrow contract.",
+    "category": "state",
+    "requiredDeps": [
+      "proptest = { version = \"1\", default-features = false, features = [\"alloc\"] }",
+      "soroban-sdk = { workspace = true, features = [\"testutils\"] }"
+    ],
+    "code": "#[cfg(test)]\nmod prop_tests {\n    use super::*;\n    use proptest::prelude::*;\n    use soroban_sdk::{testutils::Address as _, Address, Env};\n\n    /// Property: the balance of any account must never drop below zero,\n    /// regardless of the sequence or size of withdraw calls.\n    proptest! {\n        #[test]\n        fn prop_balance_never_negative(\n            initial_deposit in 1i128..=100_000_000i128,\n            withdraw_amount in 1i128..=100_000_000i128,\n        ) {\n            let env = Env::default();\n            env.mock_all_auths();\n\n            let user = Address::generate(&env);\n            let contract_id = env.register(TokenContract, ());\n            let client = TokenContractClient::new(&env, &contract_id);\n\n            // Fund the account\n            client.deposit(&user, &initial_deposit);\n\n            // Attempt a withdrawal — may succeed or be rejected, but must\n            // never leave the balance negative.\n            let _ = client.try_withdraw(&user, &withdraw_amount);\n\n            let balance = client.balance(&user);\n            prop_assert!(\n                balance >= 0i128,\n                \"balance must be non-negative after withdrawal, got {}\",\n                balance\n            );\n        }\n    }\n}"
+  },
+  {
+    "id": "tpl_shrinking_demo",
+    "label": "Shrinking Demo: deliberate failure to show minimisation",
+    "description": "A test that is designed to fail so you can observe proptest's shrinking process in the ProptestView pane. The assertion fails whenever the value exceeds 100, and proptest will shrink the counter-example down to 101.",
+    "category": "shrinking",
+    "requiredDeps": [
+      "proptest = { version = \"1\", default-features = false, features = [\"alloc\"] }",
+      "soroban-sdk = { workspace = true, features = [\"testutils\"] }"
+    ],
+    "code": "#[cfg(test)]\nmod prop_tests {\n    use super::*;\n    use proptest::prelude::*;\n    use soroban_sdk::Env;\n\n    /// DEMO: This test is intentionally broken.\n    ///\n    /// It asserts that the counter value is always <= 100, but the strategy\n    /// generates values up to 1_000.  Proptest will find a failing case and\n    /// then shrink it to the minimal counter-example: value = 101.\n    ///\n    /// Run this to see the ProptestView shrinking animation in action.\n    /// Remove or fix the assertion once you are done exploring the UI.\n    proptest! {\n        #[test]\n        fn prop_shrinking_demo(value in 0u32..=1_000u32) {\n            let env = Env::default();\n            let contract_id = env.register(IncrementContract, ());\n            let client = IncrementContractClient::new(&env, &contract_id);\n\n            // Advance the counter to `value`\n            for _ in 0..value {\n                client.increment();\n            }\n\n            let count = client.get_count();\n\n            // ⚠️  Deliberately wrong bound — will fail for value > 100.\n            // Proptest will shrink the failing input to exactly 101.\n            prop_assert!(\n                count <= 100,\n                \"expected count <= 100 but got {} (input value = {})\",\n                count, value\n            );\n        }\n    }\n}"
+  }
+]
