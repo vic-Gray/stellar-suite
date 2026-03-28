@@ -19,7 +19,7 @@ import { DiffEditorPane } from "@/components/editor/DiffEditorPane";
 // import { EditorTabs } from "@/components/ide/EditorTabs";
 import { FileExplorer } from "@/components/ide/FileExplorer";
 import { IdentitiesView } from "@/components/ide/IdentitiesView";
-import { SearchPane } from "@/components/ide/SearchPane";
+import { GlobalSearch } from "@/components/sidebar/GlobalSearch";
 import { SecurityView } from "@/components/ide/SecurityView";
 import { TestingView, TemplatesView } from "@/components/ide/TestingView";
 import { GeneratePropertyTest } from "@/components/Testing/GeneratePropertyTest";
@@ -935,12 +935,7 @@ export default function Index() {
               <IdentitiesView network={network} />
             ) : null}
             {leftSidebarTab === "search" ? (
-              <SearchPane
-                onResultSelect={(pathParts, _range) => {
-                  addTab(pathParts, pathParts[pathParts.length - 1]);
-                  setActiveTabPath(pathParts);
-                }}
-              />
+              <GlobalSearch />
             ) : null}
             {leftSidebarTab === "outline" ? <OutlineView /> : null}
             {leftSidebarTab === "security" ? (
