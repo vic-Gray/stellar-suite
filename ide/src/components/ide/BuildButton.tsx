@@ -16,6 +16,7 @@ interface BuildButtonProps {
   state?: BuildState;
   className?: string;
   compact?: boolean;
+  disabled?: boolean;
 }
 
 const buildStateCopy: Record<BuildState, string> = {
@@ -46,7 +47,7 @@ export function BuildButton({
           id="tour-build-btn"
           type="button"
           onClick={onClick}
-          disabled={isBuilding}
+          disabled={isBuilding || !!disabled}
           aria-label="Build contract"
           aria-busy={isBuilding}
           title={buildStateCopy[state]}

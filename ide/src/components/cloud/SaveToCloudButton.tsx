@@ -19,7 +19,7 @@ import { useCloudSyncStore } from "@/store/useCloudSyncStore";
 import { useWorkspaceStore, flattenWorkspaceFiles } from "@/store/workspaceStore";
 import { useAuth } from "@/hooks/useAuth";
 
-export function SaveToCloudButton() {
+export function SaveToCloudButton({ disabled }: { disabled?: boolean }) {
   const { user, isAuthenticated } = useAuth();
   const { syncStatus, errorMessage, clearError, triggerSave } =
     useCloudSyncStore();
@@ -72,7 +72,7 @@ export function SaveToCloudButton() {
           variant="ghost"
           size="sm"
           onClick={handleSave}
-          disabled={syncStatus === "saving" || syncStatus === "loading"}
+          disabled={syncStatus === "saving" || syncStatus === "loading" || !!disabled}
           className={`h-8 gap-1.5 text-xs ${
             syncStatus === "saved"
               ? "text-emerald-400"

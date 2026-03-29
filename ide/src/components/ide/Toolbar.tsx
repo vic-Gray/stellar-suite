@@ -29,6 +29,8 @@ import { SignInButton } from "@/components/auth/SignInButton";
 import { UserMenu } from "@/components/auth/UserMenu";
 import { SaveToCloudButton } from "@/components/cloud/SaveToCloudButton";
 import { useAuth } from "@/hooks/useAuth";
+import { LiveShareButton } from "@/components/ide/LiveShareButton";
+import { useLiveShareStore } from "@/store/useLiveShareStore";
 
 type BuildState = "idle" | "building" | "success" | "error";
 
@@ -81,7 +83,9 @@ export function Toolbar({
     [onNetworkChange, setNetwork],
   );
 
+  const { mode } = useLiveShareStore();
   const { isAuthenticated } = useAuth();
+  const isReadOnly = mode === "recipient";
 
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
@@ -104,27 +108,27 @@ export function Toolbar({
         <div className="flex items-center gap-2">
           <span className="mr-2 font-mono text-sm font-semibold text-primary">Kit CANVAS</span>
 
-          <BuildButton onClick={onCompile} isBuilding={isCompiling} state={isCompiling ? "building" : buildState} />
-
-          <Button onClick={onDeploy} variant="ghost" size="sm" className="h-8 gap-1.5 text-xs">
+          <BuildButton onClick={onCompile} isBuilding={isCompiling} state={isCompiling ? "building" : buildState} disabled={isReadOnly} />
+          
+          <Button onClick={onDeploy} variant="ghost" size="sm" className="h-8 gap-1.5 text-xs" disabled={isReadOnly}>
             <Upload className="h-3.5 w-3.5" />
             Deploy
           </Button>
 
-          <Button type="button" variant="ghost" size="sm" onClick={onTest} className="h-8 gap-1.5 text-xs">
+          <Button type="button" variant="ghost" size="sm" onClick={onTest} className="h-8 gap-1.5 text-xs" disabled={isReadOnly}>
             <TestTube className="h-3.5 w-3.5" />
             Test
           </Button>
 
           {onRunClippy ? (
-            <Button type="button" variant="ghost" size="sm" onClick={onRunClippy} disabled={isRunningClippy} className="h-8 gap-1.5 text-xs">
+            <Button type="button" variant="ghost" size="sm" onClick={onRunClippy} disabled={isRunningClippy || isReadOnly} className="h-8 gap-1.5 text-xs">
               {isRunningClippy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
               Run Clippy
             </Button>
           ) : null}
 
           {onRunAudit ? (
-            <Button type="button" variant="ghost" size="sm" onClick={onRunAudit} disabled={isRunningAudit} className="h-8 gap-1.5 text-xs">
+            <Button type="button" variant="ghost" size="sm" onClick={onRunAudit} disabled={isRunningAudit || isReadOnly} className="h-8 gap-1.5 text-xs">
               {isRunningAudit ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ShieldAlert className="h-3.5 w-3.5" />}
               Audit
             </Button>
@@ -132,11 +136,11 @@ export function Toolbar({
 
           <GitBlameToggle />
 
-          <Button onClick={() => setImportOpen(true)} variant="ghost" size="sm" className="h-8 gap-1.5 text-xs">
+          <Button onClick={() => setImportOpen(true)} variant="ghost" size="sm" className="h-8 gap-1.5 text-xs" disabled={isReadOnly}>
             <Github className="h-3.5 w-3.5" />
             Import
           </Button>
-          <Button onClick={() => setCiOpen(true)} variant="ghost" size="sm" className="h-8 gap-1.5 text-xs">
+          <Button onClick={() => setCiOpen(true)} variant="ghost" size="sm" className="h-8 gap-1.5 text-xs" disabled={isReadOnly}>
             <FileCode2 className="h-3.5 w-3.5" />
             Export CI
           </Button>
@@ -146,12 +150,15 @@ export function Toolbar({
             size="sm"
             className={`h-8 gap-1.5 text-xs ${hasMockState ? "text-primary" : ""}`}
             title="Mock Ledger State"
+            disabled={isReadOnly}
           >
             <Database className="h-3.5 w-3.5" />
             Mock State{hasMockState ? ` (${mockLedgerState.entries.length})` : ""}
           </Button>
 
-          <SaveToCloudButton />
+          <SaveToCloudButton disabled={isReadOnly} />
+
+          <LiveShareButton />
 
           {saveStatus ? <span className="ml-2 font-mono text-[10px] text-muted-foreground">{saveStatus}</span> : null}
         </div>
@@ -317,6 +324,9 @@ export function Toolbar({
             <Database className="h-3 w-3" />
             Mock State
           </Button>
+
+          <LiveShareButton />
+
 
           <Button
             variant="outline"
