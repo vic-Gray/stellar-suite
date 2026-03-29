@@ -53,10 +53,14 @@ import {
 } from "@/lib/integrationTestDiscovery";
 import { instantiateContract } from "@/lib/contractInstantiator";
 import { useDeployedContractsStore } from "@/store/useDeployedContractsStore";
+import useEnvironmentSlotsStore from "@/store/useEnvironmentSlotsStore";
 import { useDeploymentStore } from "@/store/useDeploymentStore";
 import { useDiagnosticsStore } from "@/store/useDiagnosticsStore";
 import { useIdentityStore } from "@/store/useIdentityStore";
-import { useWorkspaceStore, flattenWorkspaceFiles } from "@/store/workspaceStore";
+import {
+  useWorkspaceStore,
+  flattenWorkspaceFiles,
+} from "@/store/workspaceStore";
 import { useSharedEnvironmentStore } from "@/store/useSharedEnvironmentStore";
 import { useAuditLogStore } from "@/store/useAuditLogStore";
 import { useAuth } from "@/hooks/useAuth";
@@ -66,7 +70,6 @@ import { useErrorHelpStore } from "@/store/useErrorHelpStore";
 import ErrorHelpPanel from "@/components/ide/ErrorHelpPanel";
 import { useCloudSyncStore } from "@/store/useCloudSyncStore";
 import { ConflictModal } from "@/components/cloud/ConflictModal";
-import { useAuth } from "@/hooks/useAuth";
 import { parseCargoAuditOutput } from "@/utils/cargoAuditParser";
 import { parseMixedOutput } from "@/utils/cargoParser";
 import { parseClippyOutput, type ClippyLint } from "@/utils/clippyParser";
@@ -160,7 +163,9 @@ const formatRunTime = () =>
 // ---------------------------------------------------------------------------
 
 function TestingSidebar() {
-  const [tab, setTab] = useState<"snippets" | "templates" | "generate">("snippets");
+  const [tab, setTab] = useState<"snippets" | "templates" | "generate">(
+    "snippets",
+  );
   return (
     <div className="flex h-full flex-col">
       {/* Sub-tab bar */}
@@ -176,14 +181,18 @@ function TestingSidebar() {
                 : "border-transparent text-muted-foreground hover:text-foreground"
             }`}
           >
-            {t === "snippets" ? "Snippets" : t === "templates" ? "Templates" : "Generate"}
+            {t === "snippets"
+              ? "Snippets"
+              : t === "templates"
+                ? "Templates"
+                : "Generate"}
           </button>
         ))}
       </div>
       <div className="min-h-0 flex-1 overflow-hidden">
-        {tab === "snippets"  && <TestingView />}
+        {tab === "snippets" && <TestingView />}
         {tab === "templates" && <TemplatesView />}
-        {tab === "generate"  && <GeneratePropertyTest />}
+        {tab === "generate" && <GeneratePropertyTest />}
       </div>
     </div>
   );
@@ -225,12 +234,15 @@ export default function Index() {
     useVCSStore();
   const sharedEnvConfig = useSharedEnvironmentStore((s) => s.config);
   const { addLog: addAuditLog } = useAuditLogStore();
-  const { user } = useAuth();
+  const { user, isAuthenticated } = useAuth();
   const auditUser = user?.name ?? user?.email ?? "Guest";
   const { setDiagnostics, clearDiagnostics } = useDiagnosticsStore();
   const { addContract } = useDeployedContractsStore();
-  const { isOpen: isErrorHelpOpen, errorCode, closeErrorHelp } = useErrorHelpStore();
-  const { user, isAuthenticated } = useAuth();
+  const {
+    isOpen: isErrorHelpOpen,
+    errorCode,
+    closeErrorHelp,
+  } = useErrorHelpStore();
   const { scheduleAutoSave, syncStatus, conflictData } = useCloudSyncStore();
   const {
     isDeployModalOpen,
@@ -246,9 +258,13 @@ export default function Index() {
   } = useDeploymentStore();
 
   // Contract ID produced by the current deployment (shown in stepper on success)
-  const [deployedContractId, setDeployedContractId] = useState<string | null>(null);
+  const [deployedContractId, setDeployedContractId] = useState<string | null>(
+    null,
+  );
 
-  const [bottomTab, setBottomTab] = useState<"console" | "events" | "proptest">("console");
+  const [bottomTab, setBottomTab] = useState<"console" | "events" | "proptest">(
+    "console",
+  );
 
   const [wizardOpen, setWizardOpen] = useState(false);
 
@@ -264,7 +280,12 @@ export default function Index() {
     if (!hydrationComplete) return;
     if (!sharedEnvConfig.enabled) return;
     if (sharedEnvConfig.network) setNetwork(sharedEnvConfig.network);
-  }, [hydrationComplete, sharedEnvConfig.enabled, sharedEnvConfig.network, setNetwork]);
+  }, [
+    hydrationComplete,
+    sharedEnvConfig.enabled,
+    sharedEnvConfig.network,
+    setNetwork,
+  ]);
 
   const [invokeState, setInvokeState] = useState<{
     phase: "idle" | "preparing" | "success" | "failed";
@@ -303,7 +324,14 @@ export default function Index() {
     if (!isAuthenticated || !user || !hydrationComplete) return;
     const userId = user.id ?? user.email ?? "anon";
     scheduleAutoSave(userId, flattenWorkspaceFiles(files), network);
-  }, [files, isAuthenticated, user, network, hydrationComplete, scheduleAutoSave]);
+  }, [
+    files,
+    isAuthenticated,
+    user,
+    network,
+    hydrationComplete,
+    scheduleAutoSave,
+  ]);
 
   useEffect(() => {
     if (!hydrationComplete || !localRepoInitialized) {
@@ -333,14 +361,27 @@ export default function Index() {
     [activeTabPath, files],
   );
 
+  const environmentSlots = useEnvironmentSlotsStore((s) => s.slots);
+  const selectedEnvironmentSlotId = useEnvironmentSlotsStore(
+    (s) => s.selectedSlotId,
+  );
+
+  const selectedEnvironmentSlot = useMemo(() => {
+    return (
+      environmentSlots[selectedEnvironmentSlotId] ?? environmentSlots["staging"]
+    );
+  }, [environmentSlots, selectedEnvironmentSlotId]);
+
   const compilePayload = useMemo(
     () => ({
       contractName,
       network,
       activeFilePath: activeTabPath.join("/"),
       files: flattenProjectFiles(files),
+      cargoFeatures: selectedEnvironmentSlot?.cargoFeatures ?? [],
+      envSlot: selectedEnvironmentSlot?.id,
     }),
-    [activeTabPath, contractName, files, network],
+    [activeTabPath, contractName, files, network, selectedEnvironmentSlot],
   );
 
   const handleCompile = useCallback(async () => {
@@ -350,6 +391,15 @@ export default function Index() {
     setTerminalExpanded(true);
     appendTerminalOutput("> Compiling contract...\r\n");
     appendTerminalOutput(`Target network: ${network}\r\n`);
+    appendTerminalOutput(`[env: ${selectedEnvironmentSlot.id}]\r\n`);
+    if (
+      selectedEnvironmentSlot.cargoFeatures &&
+      selectedEnvironmentSlot.cargoFeatures.length > 0
+    ) {
+      appendTerminalOutput(
+        `cargo build --features ${selectedEnvironmentSlot.cargoFeatures.join(",")}\r\n`,
+      );
+    }
 
     const processor = createStreamProcessor({
       onTerminalData: appendTerminalOutput,
@@ -395,7 +445,12 @@ export default function Index() {
         user: auditUser,
         params: { contractName, network },
         details: message,
-        rawJson: { contractName, network, error: message, timestamp: new Date().toISOString() },
+        rawJson: {
+          contractName,
+          network,
+          error: message,
+          timestamp: new Date().toISOString(),
+        },
       });
     } finally {
       setIsCompiling(false);
@@ -409,6 +464,7 @@ export default function Index() {
     compilePayload,
     contractName,
     network,
+    selectedEnvironmentSlot,
     setBuildState,
     setDiagnostics,
     setIsCompiling,
@@ -582,8 +638,8 @@ export default function Index() {
       const rpcUrl =
         network === "local"
           ? useWorkspaceStore.getState().customRpcUrl
-          : NETWORK_CONFIG[network as NetworkKey]?.horizon ??
-            "https://soroban-testnet.stellar.org:443";
+          : (NETWORK_CONFIG[network as NetworkKey]?.horizon ??
+            "https://soroban-testnet.stellar.org:443");
       const networkPassphrase =
         NETWORK_CONFIG[network as NetworkKey]?.passphrase ??
         "Test SDF Network ; September 2015";
@@ -660,6 +716,34 @@ export default function Index() {
    *   Phase 2 — createContract         → contractId (C...)
    */
   const handleDeploy = useCallback(async () => {
+    appendTerminalOutput(`[env: ${selectedEnvironmentSlot.id}]\r\n`);
+    if (
+      selectedEnvironmentSlot.cargoFeatures &&
+      selectedEnvironmentSlot.cargoFeatures.length > 0
+    ) {
+      appendTerminalOutput(
+        `cargo build --features ${selectedEnvironmentSlot.cargoFeatures.join(",")}\r\n`,
+      );
+    }
+
+    if (selectedEnvironmentSlot.id === "production") {
+      const input = prompt("Type PROD to deploy to production");
+      if (input !== "PROD") {
+        appendTerminalOutput(
+          "Production deploy aborted: confirmation mismatch.\r\n",
+        );
+        return;
+      }
+    }
+
+    if (selectedEnvironmentSlot.contractId) {
+      appendTerminalOutput(
+        `Using pinned contract: ${selectedEnvironmentSlot.contractId}\r\n`,
+      );
+      setContractId(selectedEnvironmentSlot.contractId);
+      return;
+    }
+
     setDeployedContractId(null);
     openDeployModal();
     setDeploymentStep("simulating");
@@ -679,11 +763,15 @@ export default function Index() {
         body: JSON.stringify(compilePayload),
       });
 
-      const processor = createStreamProcessor({ onTerminalData: appendTerminalOutput });
+      const processor = createStreamProcessor({
+        onTerminalData: appendTerminalOutput,
+      });
       const output = await readCompileResponse(response, processor);
 
       if (!response.ok) {
-        throw new Error(output.trim() || `Build failed with status ${response.status}`);
+        throw new Error(
+          output.trim() || `Build failed with status ${response.status}`,
+        );
       }
 
       // Extract WASM hash from compile output
@@ -722,7 +810,12 @@ export default function Index() {
         user: auditUser,
         params: { contractName, network },
         details: message,
-        rawJson: { contractName, network, error: message, timestamp: new Date().toISOString() },
+        rawJson: {
+          contractName,
+          network,
+          error: message,
+          timestamp: new Date().toISOString(),
+        },
       });
     }
   }, [
@@ -732,33 +825,37 @@ export default function Index() {
     compilePayload,
     contractName,
     network,
+    selectedEnvironmentSlot,
     openDeployModal,
     runInstantiate,
     setDeploymentError,
     setDeploymentStep,
+    setContractId,
     setPendingWasmHash,
     setTerminalExpanded,
   ]);
 
   const handleTest = useCallback(() => {
     void (async () => {
-    setTerminalExpanded(true);
+      setTerminalExpanded(true);
 
-    if (mockLedgerState.entries.length > 0) {
-      appendTerminalOutput(
-        `Injecting ${mockLedgerState.entries.length} mock ledger ${mockLedgerState.entries.length === 1 ? "entry" : "entries"} via --ledger-snapshot...\r\n`,
-      );
-      appendTerminalOutput(
-        `Mock state: ${JSON.stringify(mockLedgerState)}\r\n`,
-      );
-    }
+      if (mockLedgerState.entries.length > 0) {
+        appendTerminalOutput(
+          `Injecting ${mockLedgerState.entries.length} mock ledger ${mockLedgerState.entries.length === 1 ? "entry" : "entries"} via --ledger-snapshot...\r\n`,
+        );
+        appendTerminalOutput(
+          `Mock state: ${JSON.stringify(mockLedgerState)}\r\n`,
+        );
+      }
 
       const discoveredTests = discoverWorkspaceTests(files, contractName);
       const integrationTargets = listIntegrationTargets(discoveredTests);
       const hasRootTests = hasRootTestsDirectory(files, contractName);
 
       if (discoveredTests.length === 0) {
-        appendTerminalOutput("No Rust tests discovered for the active contract.\r\n");
+        appendTerminalOutput(
+          "No Rust tests discovered for the active contract.\r\n",
+        );
         return;
       }
 
@@ -766,7 +863,9 @@ export default function Index() {
         `Detected ${discoveredTests.length} test(s): ${discoveredTests.filter((test) => test.testType === "integration").length} integration, ${discoveredTests.filter((test) => test.testType === "unit").length} unit.\r\n`,
       );
       if (hasRootTests) {
-        appendTerminalOutput("Integration tests folder detected at contract root: tests/.\r\n");
+        appendTerminalOutput(
+          "Integration tests folder detected at contract root: tests/.\r\n",
+        );
       }
 
       try {
@@ -792,7 +891,10 @@ export default function Index() {
         };
 
         if (!response.ok || payload.error) {
-          throw new Error(payload.error || `Run test request failed (status ${response.status})`);
+          throw new Error(
+            payload.error ||
+              `Run test request failed (status ${response.status})`,
+          );
         }
 
         const rawOutput = createStructuredTestOutputFromCargoRun(
@@ -810,9 +912,13 @@ export default function Index() {
         setTestRun(nextRun);
         setTerminalOutput(formatTestRunForTerminal(nextRun));
       } catch (error) {
-        const message = error instanceof Error ? error.message : "Run test request failed";
+        const message =
+          error instanceof Error ? error.message : "Run test request failed";
         appendTerminalOutput(`Falling back to simulated tests: ${message}\r\n`);
-        const rawOutput = createSimulatedCargoTestOutput({ files, activeTabPath });
+        const rawOutput = createSimulatedCargoTestOutput({
+          files,
+          activeTabPath,
+        });
         const nextRun = parseStructuredTestOutput(rawOutput);
         setTestRun(nextRun);
         setTerminalOutput(formatTestRunForTerminal(nextRun));
@@ -832,7 +938,9 @@ export default function Index() {
   const handleRerunFailedTests = useCallback(() => {
     void (async () => {
       const failedTestNames =
-        testRun?.cases.filter((testCase) => testCase.status === "failed").map((testCase) => testCase.name) ?? [];
+        testRun?.cases
+          .filter((testCase) => testCase.status === "failed")
+          .map((testCase) => testCase.name) ?? [];
 
       if (failedTestNames.length === 0) {
         return;
@@ -865,7 +973,10 @@ export default function Index() {
         };
 
         if (!response.ok || payload.error) {
-          throw new Error(payload.error || `Run test request failed (status ${response.status})`);
+          throw new Error(
+            payload.error ||
+              `Run test request failed (status ${response.status})`,
+          );
         }
 
         const selectedTests = discoveredTests.filter((test) =>
@@ -900,13 +1011,23 @@ export default function Index() {
         setTerminalOutput(formatTestRunForTerminal(nextRun));
       }
     })();
-  }, [activeTabPath, compilePayload.files, contractName, files, setTerminalExpanded, setTerminalOutput, testRun]);
+  }, [
+    activeTabPath,
+    compilePayload.files,
+    contractName,
+    files,
+    setTerminalExpanded,
+    setTerminalOutput,
+    testRun,
+  ]);
 
   const handleOpenTestTrace = useCallback(
     (traceFile: string, line: number, column = 1) => {
       const pathParts = resolveWorkspacePathForTrace(traceFile, files);
       if (!pathParts) {
-        appendTerminalOutput(`Unable to resolve ${traceFile}:${line}:${column}\r\n`);
+        appendTerminalOutput(
+          `Unable to resolve ${traceFile}:${line}:${column}\r\n`,
+        );
         return;
       }
       addTab(pathParts, pathParts[pathParts.length - 1]);
@@ -979,7 +1100,9 @@ export default function Index() {
     <div className="flex h-screen flex-col overflow-hidden">
       <Toolbar
         onCompile={handleCompile}
-        onDeploy={() => { void handleDeploy(); }}
+        onDeploy={() => {
+          void handleDeploy();
+        }}
         onTest={handleTest}
         isCompiling={isCompiling}
         buildState={buildState}
@@ -1025,9 +1148,7 @@ export default function Index() {
             {leftSidebarTab === "identities" ? (
               <IdentitiesView network={network} />
             ) : null}
-            {leftSidebarTab === "search" ? (
-              <GlobalSearch />
-            ) : null}
+            {leftSidebarTab === "search" ? <GlobalSearch /> : null}
             {leftSidebarTab === "outline" ? <OutlineView /> : null}
             {leftSidebarTab === "security" ? (
               <div className="h-full overflow-y-auto">
@@ -1049,9 +1170,7 @@ export default function Index() {
                 </div>
               </div>
             ) : null}
-            {leftSidebarTab === "tests" ? (
-              <TestingSidebar />
-            ) : null}
+            {leftSidebarTab === "tests" ? <TestingSidebar /> : null}
             {leftSidebarTab === "fuzzing" ? <FuzzingPanel /> : null}
             {leftSidebarTab === "git" ? <GitPane /> : null}
             {leftSidebarTab === "references" ? <ReferencesPane /> : null}
@@ -1062,19 +1181,25 @@ export default function Index() {
                   <span>Binary Auditing</span>
                 </div>
                 <p className="text-[11px] text-muted-foreground leading-relaxed italic">
-                  Compare compiled WASM binaries side-by-side to audit changes in public symbols and byte-level logic.
+                  Compare compiled WASM binaries side-by-side to audit changes
+                  in public symbols and byte-level logic.
                 </p>
                 <div className="p-3 bg-muted/50 rounded-lg border border-border">
                   <h4 className="text-[10px] font-bold uppercase mb-1.5 flex items-center gap-1.5">
                     <Activity className="h-3 w-3" /> Quick Tip
                   </h4>
-                  <p className="text-[10px] text-muted-foreground">Select two builds in the main area to analyze the delta between them.</p>
+                  <p className="text-[10px] text-muted-foreground">
+                    Select two builds in the main area to analyze the delta
+                    between them.
+                  </p>
                 </div>
               </div>
             ) : null}
             {leftSidebarTab === "inspector" ? <InspectorPane /> : null}
             {leftSidebarTab === "benchmarks" ? <BenchmarkDashboard /> : null}
-            {leftSidebarTab === "multisig" ? <MultisigView network={network} /> : null}
+            {leftSidebarTab === "multisig" ? (
+              <MultisigView network={network} />
+            ) : null}
             {leftSidebarTab === "liquidity" ? <LiquidityPoolSimulator /> : null}
             {leftSidebarTab === "audit" ? <AuditLogView /> : null}
             {leftSidebarTab === "assets" ? <AssetManager /> : null}
@@ -1105,8 +1230,8 @@ export default function Index() {
             >
               {(
                 [
-                  { id: "console",  label: "Console"  },
-                  { id: "events",   label: "Events"   },
+                  { id: "console", label: "Console" },
+                  { id: "events", label: "Events" },
                   { id: "proptest", label: "Proptest" },
                 ] as const
               ).map((tab) => (
@@ -1141,7 +1266,7 @@ export default function Index() {
                   }
                 />
               )}
-              {bottomTab === "events"   && <EventsPane />}
+              {bottomTab === "events" && <EventsPane />}
               {bottomTab === "proptest" && <ProptestView />}
             </div>
           </div>
