@@ -18,7 +18,7 @@ import { useEffect, useMemo, useState } from "react";
 import { BuildButton } from "@/components/ide/BuildButton";
 import { Button } from "@/components/ui/button";
 import { type NetworkKey } from "@/lib/networkConfig";
-import ImportGithubModal from "@/components/ide/ImportGithubModal";
+import { ImportWizard } from "@/components/projects/ImportWizard";
 import CiConfigGenerator from "@/components/modals/CiConfigGenerator";
 import StateMockEditor from "@/components/modals/StateMockEditor";
 import { SettingsModal } from "@/components/ide/SettingsModal";
@@ -332,7 +332,7 @@ export function Toolbar({
         </div>
       ) : null}
 
-      <ImportGithubModal open={importOpen} onClose={() => setImportOpen(false)} />
+      <ImportWizard open={importOpen} onOpenChange={setImportOpen} />
       <CiConfigGenerator open={ciOpen} onOpenChange={setCiOpen} />
       <StateMockEditor
         open={stateEditorOpen}

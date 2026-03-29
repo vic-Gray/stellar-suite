@@ -17,6 +17,7 @@ import { definitionProvider } from "@/lib/definitionProvider";
 import { symbolIndexer } from "@/lib/symbolIndexer";
 import Editor, { OnChange, OnMount } from "@monaco-editor/react";
 import type * as Monaco from "monaco-editor";
+import { useTheme } from "next-themes";
 import React, { Suspense, useEffect, useRef, useState } from "react";
 import { analyzeMathSafety } from "../../lib/mathSafetyAnalyzer";
 import { useMathSafetyStore } from "../../store/useMathSafetyStore";
@@ -57,6 +58,10 @@ const CodeEditor: React.FC<CodeEditorProps> = ({ onCursorChange, onSave }) => {
   const [mountedEditor, setMountedEditor] = useState<Monaco.editor.IStandaloneCodeEditor | null>(null);
   const [mountedMonaco, setMountedMonaco] = useState<typeof Monaco | null>(null);
   const [headContent, setHeadContent] = useState<string>("");
+  const [commentAnchor, setCommentAnchor] = useState<{
+    line: number;
+    top: number;
+  } | null>(null);
   const activeFileId = activeTabPath.join("/");
   const activeFileIdRef = useRef(activeFileId);
 
@@ -298,6 +303,26 @@ const CodeEditor: React.FC<CodeEditorProps> = ({ onCursorChange, onSave }) => {
 
     editor.onDidChangeCursorPosition((e) => {
       onCursorChange?.(e.position.lineNumber, e.position.column);
+    });
+
+    editor.onMouseMove((event) => {
+      const targetType = event.target.type;
+      const isGutterHover =
+        targetType === monaco.editor.MouseTargetType.GUTTER_GLYPH_MARGIN ||
+        targetType === monaco.editor.MouseTargetType.GUTTER_LINE_NUMBERS;
+
+      if (!isGutterHover || !event.target.position) {
+        setCommentAnchor(null);
+        return;
+      }
+
+      const line = event.target.position.lineNumber;
+      const top = editor.getTopForLineNumber(line) - editor.getScrollTop();
+      setCommentAnchor({ line, top: Math.max(0, top) });
+    });
+
+    editor.onMouseLeave(() => {
+      setCommentAnchor(null);
     });
 
     editor.onDidChangeHiddenAreas(() => {
@@ -645,6 +670,28 @@ const CodeEditor: React.FC<CodeEditorProps> = ({ onCursorChange, onSave }) => {
               headContent={headContent}
             />
           )}
+          {commentAnchor ? (
+            <button
+              type="button"
+              className="absolute left-1 z-20 rounded border border-border bg-background px-1.5 py-0.5 text-[10px] font-medium text-foreground shadow-sm transition-colors hover:bg-muted"
+              style={{ top: `${commentAnchor.top}px` }}
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => {
+                window.dispatchEvent(new Event("comments:open-pane"));
+                window.dispatchEvent(
+                  new CustomEvent("comments:start-thread", {
+                    detail: {
+                      filePath: activeFileId,
+                      line: commentAnchor.line,
+                    },
+                  }),
+                );
+                setCommentAnchor(null);
+              }}
+            >
+              Add Comment
+            </button>
+          ) : null}
         </Suspense>
       </div>
     </div>

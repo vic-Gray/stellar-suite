@@ -24,6 +24,7 @@ export type MobilePanel =
 export type SidebarTab =
   | "explorer"
   | "git"
+  | "comments"
   | "deployments"
   | "identities"
   | "multisig"
@@ -36,7 +37,10 @@ export type SidebarTab =
   | "inspector"
   | "references"
   | "binary-diff"
-  | "benchmarks";
+  | "benchmarks"
+  | "audit"
+  | "assets"
+  | "tutorials";
 export type BuildState = "idle" | "building" | "success" | "error";
 
 export interface WorkspaceTextFile {
@@ -327,11 +331,7 @@ export const useWorkspaceStore = create<WorkspaceState>()(
           ) {
             nextActivePath = [...nextPath, ...activeTabPath.slice(path.length)];
           }
-          set({
-            files: nextFiles,
-            openTabs: nextTabs,
-            activeTabPath: nextActivePath,
-          });
+          set({ files: nextFiles, openTabs: nextTabs, activeTabPath: nextActivePath });
         }
       },
 
@@ -395,8 +395,6 @@ export const useWorkspaceStore = create<WorkspaceState>()(
     }),
     {
       name: "stellar-suite-workspace-store",
-      // Persist workspace files to IndexedDB instead of localStorage.
-      // IndexedDB handles large file trees without the ~5MB localStorage limit.
       storage: createJSONStorage(() => idbStorage),
       partialize: (state) => ({
         network: state.network,
@@ -412,8 +410,6 @@ export const useWorkspaceStore = create<WorkspaceState>()(
       }),
       onRehydrateStorage: () => (state) => {
         if (state) {
-          // If IDB was empty (first load), files defaults to sampleContracts.
-          // Either way, mark hydration complete so the IDE shell can render.
           state.setHydrationComplete(true);
         }
       },

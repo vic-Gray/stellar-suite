@@ -18,6 +18,7 @@ import { MultisigView } from "@/components/ide/MultisigView";
 import { LiquidityPoolSimulator } from "@/components/ide/LiquidityPoolSimulator";
 import { GitPane } from "@/components/ide/GitPane";
 import { DiffEditorPane } from "@/components/editor/DiffEditorPane";
+import { CommentsPane } from "@/components/editor/CommentsPane";
 // import { EditorTabs } from "@/components/ide/EditorTabs";
 import { FileExplorer } from "@/components/ide/FileExplorer";
 import { IdentitiesView } from "@/components/ide/IdentitiesView";
@@ -39,6 +40,8 @@ import XdrInspector from "@/components/tools/XdrInspector";
 import { Toolbar } from "@/components/ide/Toolbar";
 import { OutlineView } from "@/components/sidebar/OutlineView";
 import { FuzzingPanel } from "@/components/sidebar/FuzzingPanel";
+import { AssetManager } from "@/components/sidebar/AssetManager";
+import { TutorialsPane } from "@/components/sidebar/TutorialsPane";
 // import { ActivityBar } from "@/components/layout/ActivityBar";
 import { StarterProjectWizard } from "@/components/modals/StarterProjectWizard";
 import { ActivityBar } from "@/components/layout/ActivityBar";
@@ -56,12 +59,19 @@ import { useDeploymentStore } from "@/store/useDeploymentStore";
 import { useDiagnosticsStore } from "@/store/useDiagnosticsStore";
 import { useIdentityStore } from "@/store/useIdentityStore";
 import { useWorkspaceStore, flattenWorkspaceFiles } from "@/store/workspaceStore";
+import { useSharedEnvironmentStore } from "@/store/useSharedEnvironmentStore";
+import { useAuditLogStore } from "@/store/useAuditLogStore";
+import { useAuth } from "@/hooks/useAuth";
+import { AuditLogView } from "@/components/ide/AuditLogView";
 import { useVCSStore } from "@/store/vcsStore";
 import { useErrorHelpStore } from "@/store/useErrorHelpStore";
 import ErrorHelpPanel from "@/components/ide/ErrorHelpPanel";
 import { useCloudSyncStore } from "@/store/useCloudSyncStore";
 import { ConflictModal } from "@/components/cloud/ConflictModal";
-import { useAuth } from "@/hooks/useAuth";
+import {
+  createWorkspaceSnapshot,
+  tutorialEngine,
+} from "@/lib/tutorials/tutorialEngine";
 import { parseCargoAuditOutput } from "@/utils/cargoAuditParser";
 import { parseMixedOutput } from "@/utils/cargoParser";
 import { parseClippyOutput, type ClippyLint } from "@/utils/clippyParser";
@@ -218,10 +228,13 @@ export default function Index() {
   const { activeContext, activeIdentity, loadIdentities } = useIdentityStore();
   const { localRepoInitialized, hydrateLocalRepo, refreshLocalStatuses } =
     useVCSStore();
+  const sharedEnvConfig = useSharedEnvironmentStore((s) => s.config);
+  const { addLog: addAuditLog } = useAuditLogStore();
+  const { user, isAuthenticated } = useAuth();
+  const auditUser = user?.name ?? user?.email ?? "Guest";
   const { setDiagnostics, clearDiagnostics } = useDiagnosticsStore();
   const { addContract } = useDeployedContractsStore();
   const { isOpen: isErrorHelpOpen, errorCode, closeErrorHelp } = useErrorHelpStore();
-  const { user, isAuthenticated } = useAuth();
   const { scheduleAutoSave, syncStatus, conflictData } = useCloudSyncStore();
   const {
     isDeployModalOpen,
@@ -248,6 +261,14 @@ export default function Index() {
       setWizardOpen(true);
     }
   }, [files.length]);
+
+  // Propagate shared/workspace environment settings to the personal store
+  // once the workspace store has finished rehydrating from IndexedDB.
+  useEffect(() => {
+    if (!hydrationComplete) return;
+    if (!sharedEnvConfig.enabled) return;
+    if (sharedEnvConfig.network) setNetwork(sharedEnvConfig.network);
+  }, [hydrationComplete, sharedEnvConfig.enabled, sharedEnvConfig.network, setNetwork]);
 
   const [invokeState, setInvokeState] = useState<{
     phase: "idle" | "preparing" | "success" | "failed";
@@ -307,8 +328,22 @@ export default function Index() {
       setLeftSidebarTab("references");
       setShowExplorer(true);
     };
+    const handleCommentsPane = () => {
+      setLeftSidebarTab("comments");
+      setShowExplorer(true);
+    };
+    const handleTutorialsPane = () => {
+      setLeftSidebarTab("tutorials");
+      setShowExplorer(true);
+    };
     window.addEventListener("referencesFound", handleRefTab);
-    return () => window.removeEventListener("referencesFound", handleRefTab);
+    window.addEventListener("comments:open-pane", handleCommentsPane);
+    window.addEventListener("tutorials:open-pane", handleTutorialsPane);
+    return () => {
+      window.removeEventListener("referencesFound", handleRefTab);
+      window.removeEventListener("comments:open-pane", handleCommentsPane);
+      window.removeEventListener("tutorials:open-pane", handleTutorialsPane);
+    };
   }, [setLeftSidebarTab, setShowExplorer]);
 
   const contractName = useMemo(
@@ -358,16 +393,36 @@ export default function Index() {
 
       appendTerminalOutput("✓ Compilation finished.\r\n");
       setBuildState("success");
+      addAuditLog({
+        category: "build",
+        action: "Contract Build",
+        status: "success",
+        user: auditUser,
+        params: { contractName, network },
+        details: "Contract compiled successfully",
+        rawJson: { contractName, network, timestamp: new Date().toISOString() },
+      });
     } catch (error) {
       const message = error instanceof Error ? error.message : "Build failed";
       appendTerminalOutput(`Build failed: ${message}\r\n`);
       setBuildState("error");
+      addAuditLog({
+        category: "build",
+        action: "Contract Build",
+        status: "failure",
+        user: auditUser,
+        params: { contractName, network },
+        details: message,
+        rawJson: { contractName, network, error: message, timestamp: new Date().toISOString() },
+      });
     } finally {
       setIsCompiling(false);
       setTimeout(() => setBuildState("idle"), 1000);
     }
   }, [
+    addAuditLog,
     appendTerminalOutput,
+    auditUser,
     clearDiagnostics,
     compilePayload,
     contractName,
@@ -576,14 +631,39 @@ export default function Index() {
       appendTerminalOutput(`✓ Contract instantiated! ID: ${newContractId}\r\n`);
       appendTerminalOutput(`  Transaction: ${transactionHash}\r\n`);
 
+      addAuditLog({
+        category: "deploy",
+        action: "Contract Deploy",
+        status: "success",
+        user: auditUser,
+        params: {
+          contractId: newContractId,
+          contractName,
+          network,
+          wasmHash,
+          transactionHash,
+        },
+        details: `Deployed to ${network} — ID: ${newContractId}`,
+        rawJson: {
+          contractId: newContractId,
+          contractName,
+          network,
+          wasmHash,
+          transactionHash,
+          timestamp: new Date().toISOString(),
+        },
+      });
+
       setDeploymentStep("success");
       toast.success(`Contract deployed: ${newContractId.substring(0, 8)}…`);
     },
     [
+      addAuditLog,
       activeContext,
       activeIdentity,
       addContract,
       appendTerminalOutput,
+      auditUser,
       contractName,
       network,
       setContractId,
@@ -653,10 +733,22 @@ export default function Index() {
       setDeploymentError(message);
       appendTerminalOutput(`✗ Deployment failed: ${message}\r\n`);
       toast.error(message);
+      addAuditLog({
+        category: "deploy",
+        action: "Contract Deploy",
+        status: "failure",
+        user: auditUser,
+        params: { contractName, network },
+        details: message,
+        rawJson: { contractName, network, error: message, timestamp: new Date().toISOString() },
+      });
     }
   }, [
+    addAuditLog,
     appendTerminalOutput,
+    auditUser,
     compilePayload,
+    contractName,
     network,
     openDeployModal,
     runInstantiate,
@@ -980,6 +1072,7 @@ export default function Index() {
             ) : null}
             {leftSidebarTab === "fuzzing" ? <FuzzingPanel /> : null}
             {leftSidebarTab === "git" ? <GitPane /> : null}
+            {leftSidebarTab === "comments" ? <CommentsPane /> : null}
             {leftSidebarTab === "references" ? <ReferencesPane /> : null}
             {leftSidebarTab === "binary-diff" ? (
               <div className="flex flex-col h-full bg-sidebar p-4 space-y-4">
@@ -1002,6 +1095,9 @@ export default function Index() {
             {leftSidebarTab === "benchmarks" ? <BenchmarkDashboard /> : null}
             {leftSidebarTab === "multisig" ? <MultisigView network={network} /> : null}
             {leftSidebarTab === "liquidity" ? <LiquidityPoolSimulator /> : null}
+            {leftSidebarTab === "audit" ? <AuditLogView /> : null}
+            {leftSidebarTab === "assets" ? <AssetManager /> : null}
+            {leftSidebarTab === "tutorials" ? <TutorialsPane /> : null}
           </aside>
         ) : null}
 
