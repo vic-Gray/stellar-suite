@@ -29,6 +29,7 @@ import { useLayoutStore } from "@/lib/layout/layoutStore";
 import { DeploymentsView } from "@/components/ide/DeploymentsView";
 import { GitPane } from "@/components/ide/GitPane";
 import CodeEditor from "@/components/ide/CodeEditor";
+import { SplitLayout } from "@/components/layout/SplitLayout";
 import { Toolbar } from "@/components/ide/Toolbar";
 import { StarterProjectWizard } from "@/components/modals/StarterProjectWizard";
 import { ActivityBar, type ActivityTab } from "@/components/layout/ActivityBar";
@@ -1210,8 +1211,9 @@ export default function Index() {
         ) : null}
 
         <main id="main-content" className="flex min-w-0 flex-1 flex-col overflow-hidden">
-          {/* <EditorTabs /> */}
-            <CodeEditor />
+          <div className="min-h-0 flex-1 overflow-hidden">
+            <SplitLayout />
+          </div>
           <div className="h-56 shrink-0 border-t border-border flex flex-col">
             {/* Bottom panel tab bar */}
             <div
