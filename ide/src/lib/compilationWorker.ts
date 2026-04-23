@@ -124,6 +124,17 @@ export class CompilationWorker {
         this.worker?.terminate();
         this.worker = null;
         break;
+
+      case 'sri-error': {
+        const sriErr = new Error(`[security] WASM integrity check failed for: ${msg.url}\n[security] Expected: ${msg.expected} | Got: ${msg.actual}\n[security] Build aborted to prevent execution of potentially tampered code.`);
+        sriErr.name = "SRIIntegrityError";
+        for (const job of this.jobs.values()) {
+          job.reject(sriErr);
+        }
+        this.jobs.clear();
+        this.worker?.terminate();
+        this.worker = null;
+        break;
       }
     }
   }
