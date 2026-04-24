@@ -10,15 +10,12 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
-import { FileExplorer } from "@/components/ide/FileExplorer";
-import { NetworkExplorer } from "@/components/ide/NetworkExplorer";
+
 import { StateExplorer } from "@/components/ide/StateExplorer";
 import { ContractPanel } from "@/components/ide/ContractPanel";
 import { DeploymentStepper } from "@/components/ide/DeploymentStepper";
 import { SidebarTab } from "@/store/workspaceStore";
-import { IdentitiesView } from "@/components/ide/IdentitiesView";
-import { GlobalSearch } from "@/components/sidebar/GlobalSearch";
-import { SecurityView } from "@/components/ide/SecurityView";
+import { LazySidebar } from "@/components/layout/LazySidebar";
 import { TestingView, TemplatesView } from "@/components/ide/TestingView";
 import { GeneratePropertyTest } from "@/components/Testing/GeneratePropertyTest";
 import { ProptestView } from "@/components/Panels/ProptestView";
@@ -28,8 +25,7 @@ import { Terminal } from "@/components/ide/Terminal";
 import { useTerminalBridge } from "@/hooks/useTerminalBridge";
 import { TestResultsLog } from "@/components/terminal/TestResultsLog";
 import { useLayoutStore } from "@/lib/layout/layoutStore";
-import { DeploymentsView } from "@/components/ide/DeploymentsView";
-import { GitPane } from "@/components/ide/GitPane";
+
 import CodeEditor from "@/components/ide/CodeEditor";
 import { SplitLayout } from "@/components/layout/SplitLayout";
 import { Toolbar } from "@/components/ide/Toolbar";
@@ -223,6 +219,9 @@ export default function Index() {
     diffViewPath,
     setDiffViewPath,
     setTerminalOutput,
+    customRpcUrl,
+    horizonUrl,
+    networkPassphrase,
   } = useWorkspaceStore();
   useTerminalBridge();
   
@@ -1349,47 +1348,31 @@ export default function Index() {
         />
 
         {showExplorer ? (
-          <aside className="hidden w-72 shrink-0 border-r border-border bg-sidebar md:block">
-            {leftSidebarTab === "explorer" ? <FileExplorer /> : null}
-            {leftSidebarTab === "deployments" ? (
-              <DeploymentsView
-                activeContractId={contractId}
-                onSelectContract={(id, net) => {
-                  setContractId(id);
-                  setNetwork(net as NetworkKey);
-                  appendTerminalOutput(
-                    `Targeting contract ${id.substring(0, 8)}... on ${net}\r\n`,
-                  );
-                }}
-              />
-            ) : null}
-            {leftSidebarTab === "identities" ? (
-              <IdentitiesView network={network} />
-            ) : null}
-            {leftSidebarTab === "search" ? <GlobalSearch /> : null}
-            {leftSidebarTab === "security" ? (
-              <div className="h-full overflow-y-auto">
-                <SecurityView
-                  clippyLints={clippyLints}
-                  clippyRunning={isRunningClippy}
-                  clippyError={clippyError}
-                  onRunClippy={handleRunClippy}
-                  onApplyClippyFix={handleApplyClippyFix}
-                  auditFindings={auditFindings}
-                  auditRunning={isRunningAudit}
-                  auditError={auditError}
-                  onRunAudit={handleRunAudit}
-                  lastClippyRunAt={lastClippyRunAt}
-                  lastAuditRunAt={lastAuditRunAt}
-                />
-              </div>
-            ) : null}
-            {leftSidebarTab === "tests" ? <TestingView /> : null}
-            {leftSidebarTab === "git" ? <GitPane /> : null}
-            {leftSidebarTab === "network" ? (
-              <NetworkExplorer network={network} />
-            ) : null}
-          </aside>
+          <LazySidebar
+            activeTab={leftSidebarTab as SidebarTab}
+            className="hidden w-72 shrink-0 border-r border-border bg-sidebar md:flex"
+            network={network}
+            onNetworkChange={setNetwork}
+            activeContractId={contractId}
+            onSelectContract={(id, net) => {
+              setContractId(id);
+              setNetwork(net as NetworkKey);
+              appendTerminalOutput(
+                `Targeting contract ${id.substring(0, 8)}... on ${net}\r\n`,
+              );
+            }}
+            clippyLints={clippyLints}
+            clippyRunning={isRunningClippy}
+            clippyError={clippyError}
+            onRunClippy={handleRunClippy}
+            onApplyClippyFix={handleApplyClippyFix}
+            auditFindings={auditFindings}
+            auditRunning={isRunningAudit}
+            auditError={auditError}
+            onRunAudit={handleRunAudit}
+            lastClippyRunAt={lastClippyRunAt}
+            lastAuditRunAt={lastAuditRunAt}
+          />
         ) : null}
 
         <main id="main-content" className="flex min-w-0 flex-1 flex-col overflow-hidden">
