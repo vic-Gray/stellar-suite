@@ -16,7 +16,8 @@
  * ─────────────────────────────────────────────────────────────
  */
 
-import React, {
+import {
+  memo,
   useCallback,
   useEffect,
   useMemo,
@@ -225,7 +226,7 @@ interface RowProps {
   isLast: boolean;
 }
 
-const TimelineEventRow = React.memo(function TimelineEventRow({ event, index, isLast }: RowProps) {
+const TimelineEventRow = memo(function TimelineEventRow({ event, index, isLast }: RowProps) {
   const [open, setOpen] = useState(false);
   const kind = classifyEvent(event.topic);
   const styles = KIND_STYLES[kind];
