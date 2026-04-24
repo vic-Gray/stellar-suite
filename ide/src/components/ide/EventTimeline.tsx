@@ -35,80 +35,45 @@ import {
   Copy,
   Check,
 } from "lucide-react";
-import { xdr } from "@stellar/stellar-sdk";
 import { useContractEvents } from "@/hooks/useContractEvents";
 import { useWorkspaceStore } from "@/store/workspaceStore";
 import type { ContractEvent } from "@/utils/eventSubscriber";
+import { formatScValAsJson } from "@/lib/scvalTransformer";
 
 // ─────────────────────────────────────────────────────────────
 // XDR Decoding helpers
 // ─────────────────────────────────────────────────────────────
 
-/** Attempt to decode a base64 XDR ScVal into a JS value. */
+/**
+ * Attempt to decode a base64 XDR ScVal string into a JS value.
+ * Delegates to the project's existing formatScValAsJson utility
+ * so all XDR SDK types stay in one place (scvalTransformer.ts).
+ */
 function decodeScValSafe(b64: string): unknown {
   try {
-    const scVal = xdr.ScVal.fromXDR(b64, "base64");
-    return scValToJs(scVal);
+    const jsonStr = formatScValAsJson(b64);
+    return JSON.parse(jsonStr) as unknown;
   } catch {
-    return b64; // return raw if decode fails
+    return b64;
   }
 }
 
-function scValToJs(v: xdr.ScVal): unknown {
-  const name = v.switch().name;
-  switch (name) {
-    case "scvVoid":      return null;
-    case "scvBool":      return v.b();
-    case "scvU32":       return v.u32();
-    case "scvI32":       return v.i32();
-    case "scvU64":       return v.u64().toString();
-    case "scvI64":       return v.i64().toString();
-    case "scvU128":      return v.u128().toString();
-    case "scvI128":      return v.i128().toString();
-    case "scvU256":      return v.u256().toString();
-    case "scvI256":      return v.i256().toString();
-    case "scvSymbol":    return v.sym().toString();
-    case "scvString":    return v.str().toString();
-    case "scvBytes":     return v.bytes().toString("hex");
-    case "scvAddress":   return v.address().toString();
-    case "scvDuration":  return `${v.duration()} slots`;
-    case "scvTimepoint": return `timepoint:${v.timepoint()}`;
-    case "scvVec": {
-      const items = v.vec() ?? [];
-      return items.map(scValToJs);
-    }
-    case "scvMap": {
-      const entries = v.map() ?? [];
-      const obj: Record<string, unknown> = {};
-      for (const e of entries) {
-        const k = String(scValToJs(e.key()));
-        obj[k] = scValToJs(e.val());
-      }
-      return obj;
-    }
-    default:
-      return `(${name})`;
-  }
-}
-
-/** Decode all base64 topic segments in an event's topic string. */
+/** Decode all topic segments (already-decoded symbol strings). */
 function decodeTopics(topicRaw: string): { label: string; decoded: unknown }[] {
-  // topic field is the first decoded symbol; we re-split from the raw data field
-  // when it's a JSON array, otherwise treat it as a single symbol.
-  const segments = topicRaw.split("|").map((s) => s.trim()).filter(Boolean);
-  return segments.map((seg) => ({
-    label: seg,
-    decoded: decodeScValSafe(seg),
-  }));
+  // The topic field from ContractEvent is already decoded to a human-readable
+  // symbol string by eventSubscriber. Return it as-is for display.
+  return [{ label: topicRaw, decoded: topicRaw }];
 }
 
-/** Decode event.data (JSON string possibly containing XDR) into JS. */
+/** Decode event.data (JSON string, possibly wrapping an XDR ScVal). */
 function decodeEventData(raw: string): unknown {
   try {
-    const parsed = JSON.parse(raw);
+    const parsed = JSON.parse(raw) as unknown;
+    // If the parsed value is a plain XDR base64 string, decode it
     if (typeof parsed === "string") return decodeScValSafe(parsed);
     return parsed;
   } catch {
+    // Not valid JSON — try as a raw XDR base64 string
     return decodeScValSafe(raw);
   }
 }
