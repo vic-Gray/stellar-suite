@@ -2,6 +2,7 @@
  * src/store/useNetworkStore.ts
  * ─────────────────────────────────────────────────────────────────────────────
  * Centralized Network Configuration Store  — Issue #647
+ * Multi-Network Parallelism                — Issue #657
  *
  * Single source of truth for:
  *  • Active network selection (testnet | futurenet | mainnet | local | custom)
@@ -10,6 +11,7 @@
  *  • Horizon URL
  *  • Custom RPC headers
  *  • Named custom network profiles (CRUD)
+ *  • Isolated per-network workspace state (deployments, env vars, notes)
  *
  * All state is persisted to localStorage under the key
  * "stellar-suite-network-store" so user preferences survive page reloads.
@@ -23,6 +25,9 @@
  *   logic themselves.
  * • Validation is run on every URL/passphrase setter so invalid values are
  *   rejected immediately and an `error` field is set for UI feedback.
+ * • `networkWorkspaces` holds isolated state keyed by network ID so that
+ *   Testnet and Mainnet (and any custom network) maintain independent
+ *   deployment lists, environment variables, and scratch notes.
  * ─────────────────────────────────────────────────────────────────────────────
  */
 
@@ -73,6 +78,36 @@ export interface ValidationResult {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Multi-network workspace isolation — Issue #657
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Isolated workspace state scoped to a single network.
+ * Each network (testnet, mainnet, custom, …) has its own slot so that
+ * switching networks never leaks deployment history or env vars.
+ */
+export interface NetworkWorkspace {
+  /** Network key this workspace belongs to. */
+  networkId: string;
+  /** Deployed contract IDs recorded on this network. */
+  deployedContracts: DeployedContractEntry[];
+  /** Key-value environment variables for this network only. */
+  envVars: Record<string, string>;
+  /** Freeform scratch notes for this network. */
+  notes: string;
+  /** ISO timestamp of the last modification. */
+  updatedAt: string;
+}
+
+/** Minimal record for a deployed contract within a workspace. */
+export interface DeployedContractEntry {
+  contractId: string;
+  wasmHash: string | null;
+  label: string | null;
+  deployedAt: string;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // State interface
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -110,6 +145,20 @@ export interface NetworkStoreState {
   validationError: string | null;
   /** ISO timestamp of last successful network selection change */
   lastChangedAt: string | null;
+
+  // ── Per-network workspace isolation — Issue #657 ──────────────────────────
+
+  /**
+   * Map from network ID → isolated workspace state.
+   * Populated lazily on first access; one entry per network ever used.
+   */
+  networkWorkspaces: Record<string, NetworkWorkspace>;
+
+  /**
+   * Convenience getter: returns the workspace for the currently active network.
+   * Creates an empty workspace on first access if none exists yet.
+   */
+  activeWorkspace: () => NetworkWorkspace;
 
   // ── Derived / computed (getters) ──────────────────────────────────────────
 
@@ -210,6 +259,34 @@ export interface NetworkStoreState {
 
   /** Reset everything back to factory defaults. */
   reset: () => void;
+
+  // ── Workspace actions — Issue #657 ────────────────────────────────────────
+
+  /**
+   * Record a newly-deployed contract in the active network's workspace.
+   */
+  addDeployedContract: (entry: Omit<DeployedContractEntry, "deployedAt">) => void;
+
+  /** Remove a contract record from the active network's workspace. */
+  removeDeployedContract: (contractId: string) => void;
+
+  /**
+   * Upsert an environment variable in the active network's workspace.
+   * Pass `value: undefined` to delete the key.
+   */
+  setEnvVar: (key: string, value: string | undefined) => void;
+
+  /** Replace the scratch notes for the active network's workspace. */
+  setNotes: (notes: string) => void;
+
+  /**
+   * Copy all workspace state (contracts + env vars + notes) from one network
+   * to another.  Useful for promoting a testnet config to mainnet.
+   */
+  cloneWorkspace: (fromNetworkId: string, toNetworkId: string) => void;
+
+  /** Wipe the workspace for a specific network. */
+  clearWorkspace: (networkId: string) => void;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -254,6 +331,16 @@ function validatePassphrase(p: string): ValidationResult {
 // Default state values
 // ─────────────────────────────────────────────────────────────────────────────
 
+function emptyWorkspace(networkId: string): NetworkWorkspace {
+  return {
+    networkId,
+    deployedContracts: [],
+    envVars: {},
+    notes: "",
+    updatedAt: now(),
+  };
+}
+
 const DEFAULTS = {
   activeNetwork: "testnet" as ExtendedNetworkKey,
   activeProfileId: null as string | null,
@@ -264,6 +351,7 @@ const DEFAULTS = {
   profiles: [] as CustomNetworkProfile[],
   validationError: null as string | null,
   lastChangedAt: null as string | null,
+  networkWorkspaces: {} as Record<string, NetworkWorkspace>,
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -540,6 +628,97 @@ export const useNetworkStore = create<NetworkStoreState>()(
           ...DEFAULTS,
           lastChangedAt: now(),
         }),
+
+      // ── Workspace: derived getter — Issue #657 ────────────────────────────
+
+      activeWorkspace: () => {
+        const s = get();
+        const key = s.activeNetwork;
+        return s.networkWorkspaces[key] ?? emptyWorkspace(key);
+      },
+
+      // ── Workspace: actions — Issue #657 ───────────────────────────────────
+
+      addDeployedContract: (entry) => {
+        const { activeNetwork, networkWorkspaces } = get();
+        const ws = networkWorkspaces[activeNetwork] ?? emptyWorkspace(activeNetwork);
+        // Avoid duplicate contract IDs
+        const filtered = ws.deployedContracts.filter(
+          (c) => c.contractId !== entry.contractId
+        );
+        const updated: NetworkWorkspace = {
+          ...ws,
+          deployedContracts: [
+            ...filtered,
+            { ...entry, deployedAt: now() },
+          ],
+          updatedAt: now(),
+        };
+        set((s) => ({
+          networkWorkspaces: { ...s.networkWorkspaces, [activeNetwork]: updated },
+        }));
+      },
+
+      removeDeployedContract: (contractId) => {
+        const { activeNetwork, networkWorkspaces } = get();
+        const ws = networkWorkspaces[activeNetwork] ?? emptyWorkspace(activeNetwork);
+        const updated: NetworkWorkspace = {
+          ...ws,
+          deployedContracts: ws.deployedContracts.filter(
+            (c) => c.contractId !== contractId
+          ),
+          updatedAt: now(),
+        };
+        set((s) => ({
+          networkWorkspaces: { ...s.networkWorkspaces, [activeNetwork]: updated },
+        }));
+      },
+
+      setEnvVar: (key, value) => {
+        const { activeNetwork, networkWorkspaces } = get();
+        const ws = networkWorkspaces[activeNetwork] ?? emptyWorkspace(activeNetwork);
+        const envVars = { ...ws.envVars };
+        if (value === undefined) {
+          delete envVars[key];
+        } else {
+          envVars[key] = value;
+        }
+        const updated: NetworkWorkspace = { ...ws, envVars, updatedAt: now() };
+        set((s) => ({
+          networkWorkspaces: { ...s.networkWorkspaces, [activeNetwork]: updated },
+        }));
+      },
+
+      setNotes: (notes) => {
+        const { activeNetwork, networkWorkspaces } = get();
+        const ws = networkWorkspaces[activeNetwork] ?? emptyWorkspace(activeNetwork);
+        const updated: NetworkWorkspace = { ...ws, notes, updatedAt: now() };
+        set((s) => ({
+          networkWorkspaces: { ...s.networkWorkspaces, [activeNetwork]: updated },
+        }));
+      },
+
+      cloneWorkspace: (fromNetworkId, toNetworkId) => {
+        const { networkWorkspaces } = get();
+        const source = networkWorkspaces[fromNetworkId] ?? emptyWorkspace(fromNetworkId);
+        const cloned: NetworkWorkspace = {
+          ...source,
+          networkId: toNetworkId,
+          updatedAt: now(),
+        };
+        set((s) => ({
+          networkWorkspaces: { ...s.networkWorkspaces, [toNetworkId]: cloned },
+        }));
+      },
+
+      clearWorkspace: (networkId) => {
+        set((s) => ({
+          networkWorkspaces: {
+            ...s.networkWorkspaces,
+            [networkId]: emptyWorkspace(networkId),
+          },
+        }));
+      },
     }),
     {
       name: "stellar-suite-network-store",
@@ -554,6 +733,7 @@ export const useNetworkStore = create<NetworkStoreState>()(
         customHeaders: s.customHeaders,
         profiles: s.profiles,
         lastChangedAt: s.lastChangedAt,
+        networkWorkspaces: s.networkWorkspaces,
       }),
     }
   )
@@ -586,3 +766,25 @@ export const useNetworkValidationError = () =>
 /** Returns the fully-resolved network config snapshot. */
 export const useResolvedNetworkConfig = () =>
   useNetworkStore((s) => s.resolvedConfig());
+
+// ── Multi-network workspace selector hooks — Issue #657 ──────────────────────
+
+/** Returns the workspace for the currently active network. */
+export const useActiveWorkspace = () =>
+  useNetworkStore((s) => s.activeWorkspace());
+
+/** Returns deployed contracts recorded on the currently active network. */
+export const useActiveNetworkContracts = () =>
+  useNetworkStore((s) => s.activeWorkspace().deployedContracts);
+
+/** Returns env vars for the currently active network workspace. */
+export const useActiveNetworkEnvVars = () =>
+  useNetworkStore((s) => s.activeWorkspace().envVars);
+
+/** Returns the scratch notes for the currently active network workspace. */
+export const useActiveNetworkNotes = () =>
+  useNetworkStore((s) => s.activeWorkspace().notes);
+
+/** Returns workspaces keyed by network ID (all networks). */
+export const useAllNetworkWorkspaces = () =>
+  useNetworkStore((s) => s.networkWorkspaces);
