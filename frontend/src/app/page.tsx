@@ -8,6 +8,8 @@ import TrustSection from "@/components/TrustSection";
 import CtaSection from "@/components/CtaSection";
 import Footer from "@/components/Footer";
 import ScrollToTopButton from "@/components/ScrollToTopButton";
+import { TemplateGallery } from "@/components/templates/TemplateGallery";
+import { PricingTable } from "@/components/pricing/PricingTable";
 
 export default function Home() {
   return (
@@ -19,6 +21,8 @@ export default function Home() {
       <ProductsSection />
       <NewsSection />
       <TrustSection />
+      <TemplateGallery />
+      <PricingTable />
       <CtaSection />
       <Footer />
       <ScrollToTopButton />
